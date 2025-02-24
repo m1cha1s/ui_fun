@@ -1,6 +1,13 @@
 #include <stdio.h>
+#include <stdint.h>
+#include <string.h>
 
 #include <raylib.h>
+
+#define IMPL
+#include "base.h"
+#include "ui.h"
+
 
 int main() {
     SetWindowState(FLAG_WINDOW_RESIZABLE 
@@ -9,13 +16,20 @@ int main() {
                    | FLAG_WINDOW_HIGHDPI);
     InitWindow(800, 600, "UI Fun");
 
+    UI_State state;
+
+    UI_InitState(&state);
+    UI_SetState(&state);
+
     while (!WindowShouldClose()) {
-        BeginDrawing();
+        DeferLoop(BeginDrawing(), EndDrawing()) {
+            ArenaScope(temp_arena) {
+                UI_BeginFrame(); // State agnostic...
 
-        ClearBackground(WHITE);
-        DrawText("Hello world!", 20, 20, 20, BLACK);
-
-        EndDrawing();
+                ClearBackground(WHITE);
+                DrawText("Hello world!", 20, 20, 20, BLACK);
+            }
+        }
     }
 
     CloseWindow();
