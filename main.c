@@ -17,7 +17,7 @@ int main() {
                    | FLAG_VSYNC_HINT
                    | FLAG_WINDOW_HIGHDPI
                    | FLAG_WINDOW_ALWAYS_RUN);
-    InitWindow(800, 600, "UI Fun");
+    // InitWindow(800, 600, "UI Fun");
 
     // UI_State state;
 
@@ -32,15 +32,17 @@ int main() {
     ui_state.root_node->dim.wh[0] = GetRenderWidth();
     ui_state.root_node->dim.wh[1] = GetRenderHeight();
 
-    UI_Node *panel = ui_panel(S("test panel"));
-    ui_push_parent(panel);
+    // UI_Node *panel = ui_panel(S("test panel"));
+    // ui_push_parent(panel);
     {
         UI_Node *hello_label = ui_label(S("Hello"));
         UI_Node *bye_label = ui_label(S("Bye"));
     }
-    ui_pop_parent();
+    // ui_pop_parent();
 
     ui_layout(ui_state.root_node);
+
+    return 0;
 
     while (!WindowShouldClose()) {
         BeginDrawing();

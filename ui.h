@@ -133,6 +133,7 @@ void ui_init(void) {
     node->first_child = NULL;
     node->next = NULL;
     node->child_count = 0;
+    node->parent = NULL;
 
     ui_state.root_node = ui_state.parent = node;
     ui_state.text_pad[UI_Axis2_x] = 2;
@@ -223,10 +224,10 @@ UI_Node *ui_label(String label) {
 void ui_layout(UI_Node *node)
 {
     Vector2 text_size;
+    if (!node) return;
     UI_Node *parent = node->parent;
 
-    if (!node) return;
-    if (!parent) return; // This should only be true for the root node.
+    if (!parent) goto exit; // This should only be true for the root node.
 
     node->pos_start[UI_Axis2_x] = parent->pos_start[UI_Axis2_x];
     node->pos_start[UI_Axis2_y] = parent->pos_start[UI_Axis2_y];
@@ -243,36 +244,42 @@ void ui_layout(UI_Node *node)
             node->dim.wh[ax] = node->size[ax].value;
             break;
         case UI_Size_Children_Sum:
-            child->dim.wh[ax] = 0;
+            node->dim.wh[ax] = 0;
 
-            ui_layout(child);
-            UI_Node *child2 = child->first_child;
-            for (usize j = 0; j < child->child_count; ++j) {
-                child->dim.wh[ax] += child2->dim.wh[ax];
-                child2 = child2->next;
+            ui_layout(node->first_child);
+
+            UI_Node *child = node->first_child;
+            while (child) {
+                node->dim.wh[ax] += child->dim.wh[ax];
+                child = child->next;
             }
             break;
         case UI_Size_Text_Content:
-            text_size = MeasureTextEx(GetFontDefault(), (const char*)child->string.str, FONT_SIZE, FONT_SIZE/10);
+            text_size = MeasureTextEx(
+                GetFontDefault(),
+                (const char*)child->string.str,
+                FONT_SIZE,
+                FONT_SIZE/10
+            );
             f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y};
-            // f32 xy[UI_Axis2_COUNT] = {0, 0};
             printf("Foo\n");
-            child->dim.wh[ax] = xy[ax]+2*child->text_pad[ax];
+            node->dim.wh[ax] = xy[ax]+2*node->text_pad[ax];
             break;
         default:
             break;
         }
     }
 
-    if (root->flags & UI_LAYOUT_H) {
-        child->dim.xy[UI_Axis2_x] = node_start[UI_Axis2_x];
-        node_start[UI_Axis2_x] += child->dim.wh[UI_Axis2_x];
+    if (parent->flags & UI_LAYOUT_H) {
+        node->dim.xy[UI_Axis2_x] = parent->pos_start[UI_Axis2_x];
+        parent->pos_start[UI_Axis2_x] += node->dim.wh[UI_Axis2_x];
     }
-    if (root->flags & UI_LAYOUT_V) {
-        child->dim.xy[UI_Axis2_y] = node_start[UI_Axis2_y];
-        node_start[UI_Axis2_y] += child->dim.wh[UI_Axis2_y];
+    if (parent->flags & UI_LAYOUT_V) {
+        node->dim.xy[UI_Axis2_y] = parent->pos_start[UI_Axis2_y];
+        parent->pos_start[UI_Axis2_y] += node->dim.wh[UI_Axis2_y];
     }
 
+exit:
     ui_layout(node->next);
 }
 
