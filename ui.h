@@ -55,6 +55,7 @@ struct UI_Node {
     usize child_count;
 
     UI_Size size[UI_Axis2_COUNT];
+    f32 pos_start[UI_Axis2_COUNT];
 
     UI_Flags flags;
 
@@ -219,63 +220,60 @@ UI_Node *ui_label(String label) {
 }
 
 // FIXME: change from iterating over the children to building self with parent as ref, maybe.
-void ui_layout(UI_Node *root)
+void ui_layout(UI_Node *node)
 {
     Vector2 text_size;
+    UI_Node *parent = node->parent;
 
-    f32 node_start[UI_Axis2_COUNT];
-    node_start[UI_Axis2_x] = root->dim.xy[UI_Axis2_x];
-    node_start[UI_Axis2_y] = root->dim.xy[UI_Axis2_y];
+    if (!node) return;
+    if (!parent) return; // This should only be true for the root node.
 
-    UI_Node *child = root->first_child;
-    for (usize i = 0; i < root->child_count; ++i) 
+    node->pos_start[UI_Axis2_x] = parent->pos_start[UI_Axis2_x];
+    node->pos_start[UI_Axis2_y] = parent->pos_start[UI_Axis2_y];
+
+    for (int ax = UI_Axis2_x; ax < UI_Axis2_COUNT; ++ax)
     {
-        for (int ax = UI_Axis2_x; ax < UI_Axis2_COUNT; ++ax)
+        switch (node->size[ax].kind)
         {
-            // 1st: Sizing
-            if (!child) break;
-            switch (child->size[ax].kind)
-            {
-            case UI_Size_Null: break;
-            case UI_Size_Parent_Percent:
-                child->dim.wh[ax] = root->dim.wh[ax]*child->size[ax].value;
-                break;
-            case UI_Size_Pixels:
-                child->dim.wh[ax] = child->size[ax].value;
-                break;
-            case UI_Size_Children_Sum:
-                child->dim.wh[ax] = 0;
-                ui_layout(child);
-                UI_Node *child2 = child->first_child;
-                for (usize j = 0; j < child->child_count; ++j) {
-                    child->dim.wh[ax] += child2->dim.wh[ax];
-                    child2 = child2->next;
-                }
-                break;
-            case UI_Size_Text_Content:
-                text_size = MeasureTextEx(GetFontDefault(), (const char*)child->string.str, FONT_SIZE, FONT_SIZE/10);
-                f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y};
-                // f32 xy[UI_Axis2_COUNT] = {0, 0};
-                printf("Foo\n");
-                child->dim.wh[ax] = xy[ax]+2*child->text_pad[ax];
-                break;
-            default:
-                break;
+        case UI_Size_Null: break;
+        case UI_Size_Parent_Percent:
+            node->dim.wh[ax] = parent->dim.wh[ax]*node->size[ax].value;
+            break;
+        case UI_Size_Pixels:
+            node->dim.wh[ax] = node->size[ax].value;
+            break;
+        case UI_Size_Children_Sum:
+            child->dim.wh[ax] = 0;
+
+            ui_layout(child);
+            UI_Node *child2 = child->first_child;
+            for (usize j = 0; j < child->child_count; ++j) {
+                child->dim.wh[ax] += child2->dim.wh[ax];
+                child2 = child2->next;
             }
+            break;
+        case UI_Size_Text_Content:
+            text_size = MeasureTextEx(GetFontDefault(), (const char*)child->string.str, FONT_SIZE, FONT_SIZE/10);
+            f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y};
+            // f32 xy[UI_Axis2_COUNT] = {0, 0};
+            printf("Foo\n");
+            child->dim.wh[ax] = xy[ax]+2*child->text_pad[ax];
+            break;
+        default:
+            break;
         }
-
-        if (root->flags & UI_LAYOUT_H) {
-            child->dim.xy[UI_Axis2_x] = node_start[UI_Axis2_x];
-            node_start[UI_Axis2_x] += child->dim.wh[UI_Axis2_x];
-        }
-        if (root->flags & UI_LAYOUT_V) {
-            child->dim.xy[UI_Axis2_y] = node_start[UI_Axis2_y];
-            node_start[UI_Axis2_y] += child->dim.wh[UI_Axis2_y];
-        }
-
-        if (!child) break;
-        child = child->next;
     }
+
+    if (root->flags & UI_LAYOUT_H) {
+        child->dim.xy[UI_Axis2_x] = node_start[UI_Axis2_x];
+        node_start[UI_Axis2_x] += child->dim.wh[UI_Axis2_x];
+    }
+    if (root->flags & UI_LAYOUT_V) {
+        child->dim.xy[UI_Axis2_y] = node_start[UI_Axis2_y];
+        node_start[UI_Axis2_y] += child->dim.wh[UI_Axis2_y];
+    }
+
+    ui_layout(node->next);
 }
 
 void ui_draw(UI_Node *node) {
