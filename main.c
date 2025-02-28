@@ -26,8 +26,19 @@ int main() {
 
     ui_init();
 
-    UI_Node *hello_label = ui_label(S("Hello"));
-    UI_Node *bye_label = ui_label(S("Bye"));
+    ui_state.root_node->dim.xy[0] = 0;
+    ui_state.root_node->dim.xy[1] = 0;
+
+    ui_state.root_node->dim.wh[0] = GetRenderWidth();
+    ui_state.root_node->dim.wh[1] = GetRenderHeight();
+
+    UI_Node *panel = ui_panel(S("test panel"));
+    ui_push_parent(panel);
+    {
+        UI_Node *hello_label = ui_label(S("Hello"));
+        UI_Node *bye_label = ui_label(S("Bye"));
+    }
+    ui_pop_parent();
 
     ui_layout(ui_state.root_node);
 
@@ -45,5 +56,6 @@ int main() {
         EndDrawing();
     }
 
+    ui_deinit();
     CloseWindow();
 }

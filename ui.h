@@ -42,6 +42,8 @@ enum {
     UI_DRAW_BACKGROUND = (1ull<<1),
     UI_DRAW_FRAME      = (1ull<<2),
     UI_CLICKABLE       = (1ull<<3),
+    UI_LAYOUT_V        = (1ull<<4),
+    UI_LAYOUT_H        = (1ull<<5),
 };
 
 typedef struct UI_Node UI_Node;
@@ -58,12 +60,15 @@ struct UI_Node {
 
     usize hash;
     String string;
+    f32 text_pad[UI_Axis2_COUNT];
 
     Rect dim;
 };
 
 typedef struct UI_State {
     Arena node_arena;
+
+    f32 text_pad[UI_Axis2_COUNT];
 
     UI_Node *root_node;
     UI_Node *parent;
@@ -81,6 +86,7 @@ UI_Node *ui_make_node(UI_Flags flags, String id);
 // Builders
 
 void ui_init(void);
+void ui_deinit(void);
 
 void ui_build_begin(void);
 void ui_build_end(void);
@@ -88,6 +94,10 @@ void ui_build_end(void);
 void ui_push_parent(UI_Node *parent);
 void ui_pop_parent(void);
 
+void ui_set_text_pad_x(f32 val);
+void ui_set_text_pad_y(f32 val);
+
+UI_Node *ui_panel(String id);
 UI_Node *ui_label(String label);
 
 void ui_layout(UI_Node *node);
@@ -114,7 +124,7 @@ void ui_init(void) {
 
     node->string = id;
     node->hash = hash_String(id);
-    node->flags = 0;
+    node->flags = UI_LAYOUT_V;
 
     node->size[UI_Axis2_x].kind = UI_Size_Null;
     node->size[UI_Axis2_y].kind = UI_Size_Null;
@@ -124,6 +134,12 @@ void ui_init(void) {
     node->child_count = 0;
 
     ui_state.root_node = ui_state.parent = node;
+    ui_state.text_pad[UI_Axis2_x] = 2;
+    ui_state.text_pad[UI_Axis2_y] = 2;
+}
+
+void ui_deinit(void) {
+    arena_free(&ui_state.node_arena);
 }
 
 UI_Node *ui_make_node(UI_Flags flags, String id) {
@@ -140,6 +156,9 @@ UI_Node *ui_make_node(UI_Flags flags, String id) {
     node->next = NULL;
     node->child_count = 0;
 
+    node->text_pad[UI_Axis2_x] = ui_state.text_pad[UI_Axis2_x];
+    node->text_pad[UI_Axis2_y] = ui_state.text_pad[UI_Axis2_y];
+
     node->parent = ui_state.parent;
 
     UI_Node *pchild = ui_state.parent->first_child;
@@ -155,7 +174,7 @@ UI_Node *ui_make_node(UI_Flags flags, String id) {
 }
 
 void ui_build_begin(void) {
-    // ui_state.root_node = 
+    // ui_state.root_node =
 }
 
 void ui_build_end(void) {
@@ -168,6 +187,21 @@ void ui_push_parent(UI_Node *parent) {
 
 void ui_pop_parent(void) {
     ui_state.parent = ui_state.parent->parent;
+}
+
+void ui_set_text_pad_x(f32 val) {
+    ui_state.text_pad[UI_Axis2_x] = val;
+}
+
+void ui_set_text_pad_y(f32 val) {
+    ui_state.text_pad[UI_Axis2_y] = val;
+}
+
+UI_Node *ui_panel(String id) {
+    UI_Node *panel_node = ui_make_node(UI_DRAW_BACKGROUND, id);
+    panel_node->size[UI_Axis2_x].kind = UI_Size_Children_Sum;
+    panel_node->size[UI_Axis2_y].kind = UI_Size_Children_Sum;
+    return panel_node;
 }
 
 UI_Node *ui_label(String label) {
@@ -223,15 +257,22 @@ void ui_layout(UI_Node *root)
                 f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y};
                 // f32 xy[UI_Axis2_COUNT] = {0, 0};
                 printf("Foo\n");
-                child->dim.wh[ax] = xy[ax];
+                child->dim.wh[ax] = xy[ax]+2*child->text_pad[ax];
                 break;
             default:
                 break;
             }
-            
-            child->dim.xy[ax] = node_start[ax];
-            node_start[ax] += child->dim.wh[ax];
         }
+
+        if (root->flags & UI_LAYOUT_H) {
+            child->dim.xy[UI_Axis2_x] = node_start[UI_Axis2_x];
+            node_start[UI_Axis2_x] += child->dim.wh[UI_Axis2_x];
+        }
+        if (root->flags & UI_LAYOUT_V) {
+            child->dim.xy[UI_Axis2_y] = node_start[UI_Axis2_y];
+            node_start[UI_Axis2_y] += child->dim.wh[UI_Axis2_y];
+        }
+
         if (!child) break;
         child = child->next;
     }
@@ -246,10 +287,16 @@ void ui_draw(UI_Node *node) {
         .height = node->dim.wh[UI_Axis2_y],
     };
     const Color colors[3] = {RED, BLUE, GREEN};
-    // printf("%f %f %f %f\n", r.x, r.y, r.width, r.height);
-    
+    printf("%p %f %f %f %f\n", node, r.x, r.y, r.width, r.height);
+
     if (node->flags & UI_DRAW_BACKGROUND) DrawRectangleRec(r, colors[node->hash%3]);
-    if (node->flags & UI_DRAW_TEXT) DrawText((const char *)node->string.str, node->dim.xy[0], node->dim.xy[1], FONT_SIZE, BLACK);
+    if (node->flags & UI_DRAW_TEXT) DrawText(
+        (const char *)node->string.str,
+        node->dim.xy[0]+node->text_pad[0],
+        node->dim.xy[1]+node->text_pad[1],
+        FONT_SIZE,
+        BLACK
+    );
 
 
     ui_draw(node->next);
