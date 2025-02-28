@@ -6,9 +6,6 @@
 
 #define MS_ARENA_IMPLEMENTATION
 #include "ms_arena.h"
-#define STB_DS_IMPLEMENTATION
-#include "stb_ds.h"
-#undef STB_DS_IMPLEMENTATION
 #define IMPL
 #include "ui.h"
 
@@ -22,18 +19,27 @@ int main() {
                    | FLAG_WINDOW_ALWAYS_RUN);
     InitWindow(800, 600, "UI Fun");
 
-    UI_State state;
+    // UI_State state;
 
-    ui_init_state(&state);
-    ui_set_state(&state);
+    // ui_init_state(&state);
+    // ui_set_state(&state);
+
+    ui_init();
+
+    UI_Node *hello_label = ui_label(S("Hello"));
+    UI_Node *bye_label = ui_label(S("Bye"));
+
+    ui_layout(ui_state.root_node);
 
     while (!WindowShouldClose()) {
         BeginDrawing();
 
-            ui_begin_frame(); // State agnostic...
+            // ui_begin_frame(); // State agnostic...
 
             ClearBackground(WHITE);
             DrawText("Hello world!", 20, 20, 20, BLACK);
+
+            ui_draw(ui_state.root_node);
 
             arena_reset(&temp_arena);
         EndDrawing();
