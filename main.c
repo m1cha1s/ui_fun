@@ -17,7 +17,7 @@ int main() {
                    | FLAG_VSYNC_HINT
                    | FLAG_WINDOW_HIGHDPI
                    | FLAG_WINDOW_ALWAYS_RUN);
-    // InitWindow(800, 600, "UI Fun");
+    InitWindow(800, 600, "UI Fun");
 
     // UI_State state;
 
@@ -32,17 +32,26 @@ int main() {
     ui_state.root_node->dim.wh[0] = GetRenderWidth();
     ui_state.root_node->dim.wh[1] = GetRenderHeight();
 
-    // UI_Node *panel = ui_panel(S("test panel"));
-    // ui_push_parent(panel);
+    UI_Node *panel = ui_panel(S("test panel"));
+    ui_push_parent(panel);
     {
         UI_Node *hello_label = ui_label(S("Hello"));
-        UI_Node *bye_label = ui_label(S("Bye"));
+        UI_Node *bye_label = ui_label(S("Byeo"));
     }
-    // ui_pop_parent();
+    ui_pop_parent();
+
+    panel = ui_panel(S("50%"));
+    panel->size[UI_Axis2_x].kind = UI_Size_Parent_Percent;
+    panel->size[UI_Axis2_x].value = 0.3;
+    ui_push_parent(panel);
+    {
+        UI_Node *a = ui_label(S("Gello"));
+    }
+    ui_pop_parent();
 
     ui_layout(ui_state.root_node);
 
-    return 0;
+    // return 0;
 
     while (!WindowShouldClose()) {
         BeginDrawing();
@@ -50,8 +59,13 @@ int main() {
             // ui_begin_frame(); // State agnostic...
 
             ClearBackground(WHITE);
-            DrawText("Hello world!", 20, 20, 20, BLACK);
+            // DrawText("Hello world!", 20, 20, 20, BLACK);
 
+            ui_state.root_node->dim.wh[0] = GetRenderWidth();
+            ui_state.root_node->dim.wh[1] = GetRenderHeight();
+
+
+            ui_layout(ui_state.root_node);
             ui_draw(ui_state.root_node);
 
             arena_reset(&temp_arena);

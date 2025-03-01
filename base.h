@@ -31,4 +31,8 @@ typedef struct String {
 } String;
 #define S(str) ((String){(u8*)str, sizeof(str)-1})
 
+#define Min(a,b) ((a) < (b) ? (a) : (b))
+#define Max(a,b) ((a) > (b) ? (a) : (b))
+#define ArrayLen(arr) (sizeof((arr))/sizeof(*(arr)))
+
 #endif
