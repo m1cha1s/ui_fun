@@ -7,8 +7,8 @@
 
 #include <raylib.h>
 
+#define BASE_ARENA
 #include "base.h"
-#include "ms_arena.h"
 
 #define FONT_SIZE 20
 
@@ -68,7 +68,10 @@ struct UI_Node {
 };
 
 typedef struct UI_State {
-    Arena node_arena;
+    Arena *static_arena;
+    
+    Arena *build_arena[2]; // Two build arenas...
+    u32 build_step;
     
     f32 pad[UI_Axis2_COUNT];
     
@@ -80,36 +83,36 @@ extern UI_State ui_state;
 
 // Helpers
 
-usize HashString(String str);
+usize hash_string(String str);
 
-UI_Node *UI_MakeNode(UI_Flags flags, String id);
+UI_Node *ui_make_node(UI_Flags flags, String id);
 
 // Builders
 
-void UI_Init(void);
-void UI_Deinit(void);
+void ui_init(void);
+void ui_deinit(void);
 
-void UI_BuildBegin(void);
-void UI_BuildEnd(void);
+void ui_build_begin(void);
+void ui_build_end(void);
 
-void UI_PushParent(UI_Node *parent);
-void UI_PopParent(void);
+void ui_push_parent(UI_Node *parent);
+void ui_pop_parent(void);
 
-void UI_SetPadX(f32 val);
-void UI_SetPadY(f32 val);
+void ui_set_pad_x(f32 val);
+void ui_set_pad_y(f32 val);
 
-UI_Node *UI_Panel(String id);
-UI_Node *UI_Label(String label);
+UI_Node *ui_panel(String id);
+UI_Node *ui_label(String label);
 
-void UI_Layout(UI_Node *node);
+void ui_layout(UI_Node *node);
 
-void UI_Draw(UI_Node *node);
+void ui_draw(UI_Node *node);
 
 #ifdef IMPL
 
 UI_State ui_state;
 
-usize HashString(String str) {
+usize hash_string(String str) {
     usize hash = 2166136261u;
     for (usize i = 0; i < str.len; ++i) {
         hash ^= (u8)str.str[i];
@@ -118,14 +121,21 @@ usize HashString(String str) {
     return hash;
 }
 
-void UI_Init(void) {
-    UI_Node *node = ArenaAlloc(&ui_state.node_arena, sizeof(UI_Node));
-    memset(node, 0, sizeof(*node));
+void ui_init(void) {
+    memory_set(&ui_state, 0, sizeof(UI_State));
+    
+    ui_state.static_arena = arena_new();
+    
+    ui_state.build_arena[0] = arena_new();
+    ui_state.build_arena[1] = arena_new();
+    
+    UI_Node *node = arena_alloc(ui_state.static_arena, sizeof(UI_Node));
+    memory_set(node, 0, sizeof(*node));
     
     String id = S("_root");
     
     node->string = id;
-    node->hash = HashString(id);
+    node->hash = hash_string(id);
     node->flags = UI_LAYOUT_V;
     
     node->size[UI_Axis2_X].kind = UI_Size_Null;
@@ -141,16 +151,18 @@ void UI_Init(void) {
     ui_state.pad[UI_Axis2_Y] = 10;
 }
 
-void UI_Deinit(void) {
-    ArenaFree(&ui_state.node_arena);
+void ui_deinit(void) {
+    arena_free(ui_state.build_arena[0]);
+    arena_free(ui_state.build_arena[1]);
+    arena_free(ui_state.static_arena);
 }
 
-UI_Node *UI_MakeNode(UI_Flags flags, String id) {
-    UI_Node *node = ArenaAlloc(&ui_state.node_arena, sizeof(UI_Node));
-    memset(node, 0, sizeof(*node));
+UI_Node *ui_make_node(UI_Flags flags, String id) {
+    UI_Node *node = arena_alloc(ui_state.build_arena[ui_state.build_step], sizeof(UI_Node));
+    memory_set(node, 0, sizeof(*node));
     
     node->string = id;
-    node->hash = HashString(id);
+    node->hash = hash_string(id);
     node->flags = flags;
     
     node->size[UI_Axis2_X].kind = UI_Size_Null;
@@ -173,43 +185,50 @@ UI_Node *UI_MakeNode(UI_Flags flags, String id) {
         ui_state.parent->first_child = node;
     }
     
-    
     return node;
 }
 
-void UI_BuildBegin(void) {
-    // ui_state.root_node =
-}
-
-void UI_BuildEnd(void) {
+void ui_build_begin(void) {
+    ui_layout(ui_state.root_node);
+    ui_draw(ui_state.root_node);
     
+    ui_state.root_node->first_child = NULL;
+    ui_state.root_node->parent = NULL;
+    ui_state.root_node->next = NULL;
 }
 
-void UI_PushParent(UI_Node *parent) {
+void ui_build_end(void) {
+    ui_state.build_step += 1;
+    ui_state.build_step &= 0x1;
+    
+    arena_reset(ui_state.build_arena[ui_state.build_step]);
+}
+
+void ui_push_parent(UI_Node *parent) {
     ui_state.parent = parent;
 }
 
-void UI_PopParent(void) {
+void ui_pop_parent(void) {
     ui_state.parent = ui_state.parent->parent;
 }
 
-void UI_SetPadX(f32 val) {
+void ui_set_pad_x(f32 val) {
     ui_state.pad[UI_Axis2_X] = val;
 }
 
-void UI_SetPadY(f32 val) {
+void ui_set_pad_y(f32 val) {
     ui_state.pad[UI_Axis2_Y] = val;
 }
 
-UI_Node *UI_Panel(String id) {
-    UI_Node *panel_node = UI_MakeNode(UI_DRAW_BACKGROUND | UI_LAYOUT_H, id);
+UI_Node *ui_panel(String id) {
+    UI_Node *panel_node = ui_make_node(UI_DRAW_BACKGROUND | UI_LAYOUT_H, id);
     panel_node->size[UI_Axis2_X].kind = UI_Size_Children_Sum;
     panel_node->size[UI_Axis2_Y].kind = UI_Size_Children_Sum;
     return panel_node;
 }
 
-UI_Node *UI_Label(String label) {
-    UI_Node *label_node = UI_MakeNode(UI_DRAW_TEXT | UI_DRAW_BACKGROUND, label);
+UI_Node *ui_label(String label) {
+    UI_Node *label_node = ui_make_node(UI_DRAW_TEXT | UI_DRAW_BACKGROUND, label);
     label_node->size[UI_Axis2_X].kind = UI_Size_Text_Content;
     label_node->size[UI_Axis2_Y].kind = UI_Size_Text_Content;
     
@@ -223,7 +242,7 @@ UI_Node *UI_Label(String label) {
 }
 
 // FIXME: change from iterating over the children to building self with parent as ref, maybe.
-void UI_Layout(UI_Node *node)
+void ui_layout(UI_Node *node)
 {
     Vector2 text_size;
     UI_Node *child;
@@ -235,7 +254,7 @@ void UI_Layout(UI_Node *node)
     UI_Node *parent = node->parent;
     
     if (!parent) {
-        UI_Layout(node->first_child);
+        ui_layout(node->first_child);
         goto exit; // This should only be true for the root node.
     }
     
@@ -245,7 +264,7 @@ void UI_Layout(UI_Node *node)
     node->dim.xy[UI_Axis2_X] = parent->pos_start[UI_Axis2_X];
     node->dim.xy[UI_Axis2_Y] = parent->pos_start[UI_Axis2_Y];
     
-    UI_Layout(node->first_child);
+    ui_layout(node->first_child);
     
     for (int ax = UI_Axis2_X; ax < UI_Axis2_COUNT; ++ax)
     {
@@ -261,7 +280,7 @@ void UI_Layout(UI_Node *node)
             case UI_Size_Children_Sum:
             node->dim.wh[ax] = node->pos_start[ax]-node->dim.xy[ax] + node->pad[ax];
             
-            // UI_Layout(node->first_child);
+            // ui_layout(node->first_child);
             if (node->dim.wh[ax] == 2*node->pad[ax]) {
                 child = node->first_child;
                 while (child) {
@@ -293,10 +312,10 @@ void UI_Layout(UI_Node *node)
     }
     
     exit:
-    UI_Layout(node->next);
+    ui_layout(node->next);
 }
 
-void UI_Draw(UI_Node *node) {
+void ui_draw(UI_Node *node) {
     if (!node) return;
     Rectangle r = {
         .x = node->dim.xy[UI_Axis2_X],
@@ -330,8 +349,8 @@ void UI_Draw(UI_Node *node) {
                                              BLACK
                                              );
     
-    UI_Draw(node->first_child);
-    UI_Draw(node->next);
+    ui_draw(node->first_child);
+    ui_draw(node->next);
 }
 
 #endif
