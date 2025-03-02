@@ -9,6 +9,7 @@
 
 #define BASE_ARENA
 #include "base.h"
+#include "stb_ds.h"
 
 #define FONT_SIZE 20
 
@@ -48,35 +49,53 @@ enum {
 
 typedef struct UI_Node UI_Node;
 struct UI_Node {
+    // Builder filled
+    UI_Node *parent;
     UI_Node *first_child;
     UI_Node *next;
-    UI_Node *parent;
-    
     usize child_count;
     
+    f32 pad[UI_Axis2_COUNT];
+    UI_Flags flags;
+    UI_Size size[UI_Axis2_COUNT];
+
+    usize hash;
+    String string;
+
     // Calculated every frame;
     f32 pos_start[UI_Axis2_COUNT];
     Rect dim;
-    
-    UI_Size size[UI_Axis2_COUNT];
-    
-    UI_Flags flags;
-    
-    usize hash;
-    String string;
-    f32 pad[UI_Axis2_COUNT];
 };
 
+typedef struct UI_Event {
+    b8 clicked;
+} UI_Event;
+
+typedef struct UI_Node_Data {
+    usize frame_number;
+
+    // Last frame event info also lands here, used by builders to report events to the caller.
+    UI_Event event;
+} UI_Node_Data;
+
+typedef struct UI_Node_Data_KV {
+    usize key;
+    UI_Node_Data value;
+} UI_Node_Data_KV;
+
 typedef struct UI_State {
-    Arena *static_arena;
-    
-    Arena *build_arena[2]; // Two build arenas...
-    u32 build_step;
-    
+    Arena *arena;
+
+    usize frame_number;
+
+    Arena *build_arena;
+
     f32 pad[UI_Axis2_COUNT];
     
     UI_Node *root_node;
     UI_Node *parent;
+
+    UI_Node_Data_KV *node_data;
 } UI_State;
 
 extern UI_State ui_state;
@@ -158,12 +177,18 @@ void ui_deinit(void) {
 }
 
 UI_Node *ui_make_node(UI_Flags flags, String id) {
-    UI_Node *node = arena_alloc(ui_state.build_arena[ui_state.build_step], sizeof(UI_Node));
+    UI_Node *node = arena_alloc(ui_state.build_arena, sizeof(UI_Node));
     memory_set(node, 0, sizeof(*node));
     
     node->string = id;
     node->hash = hash_string(id);
     node->flags = flags;
+
+    ssize idx = hmgeti(ui_state.node_data, node->hash);
+    if (idx < 0) // New node
+        hmput(ui_state.node_data, node->hash, (UI_Node_Data){0});
+    else
+        ui_state.node_data[idx].frame_number = ui_state.frame_number;
     
     node->size[UI_Axis2_X].kind = UI_Size_Null;
     node->size[UI_Axis2_Y].kind = UI_Size_Null;
@@ -189,19 +214,20 @@ UI_Node *ui_make_node(UI_Flags flags, String id) {
 }
 
 void ui_build_begin(void) {
-    ui_layout(ui_state.root_node);
-    ui_draw(ui_state.root_node);
-    
+    arena_reset(ui_state.build_arena);
+
     ui_state.root_node->first_child = NULL;
     ui_state.root_node->parent = NULL;
     ui_state.root_node->next = NULL;
+
+    ui_state.frame_number += 1;
 }
 
 void ui_build_end(void) {
-    ui_state.build_step += 1;
-    ui_state.build_step &= 0x1;
-    
-    arena_reset(ui_state.build_arena[ui_state.build_step]);
+    ui_layout(ui_state.root_node);
+    // ui_dispach_events();
+    ui_draw(ui_state.root_node);
+    // ui_prune();
 }
 
 void ui_push_parent(UI_Node *parent) {
@@ -337,17 +363,13 @@ void ui_draw(UI_Node *node) {
         PURPLE,
         VIOLET,
     };
-    // printf("%p %p %f %f %f %f\n", node, node->parent, r.x, r.y, r.width, r.height);
-    
     
     if (node->flags & UI_DRAW_BACKGROUND) DrawRectangleRec(r, colors[node->hash%ArrayLen(colors)]);
-    if (node->flags & UI_DRAW_TEXT) DrawText(
-                                             (const char *)node->string.str,
+    if (node->flags & UI_DRAW_TEXT) DrawText((const char *)node->string.str,
                                              node->dim.xy[0]+node->pad[0],
                                              node->dim.xy[1]+node->pad[1],
                                              FONT_SIZE,
-                                             BLACK
-                                             );
+                                             BLACK);
     
     ui_draw(node->first_child);
     ui_draw(node->next);

@@ -10,7 +10,7 @@
 #define IMPL
 #include "ui.h"
 
-Arena *temp_arena = NULL;
+Arena *temp_arena;
 
 int main() {
     temp_arena = arena_new();
