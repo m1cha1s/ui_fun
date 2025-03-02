@@ -20,9 +20,9 @@ typedef struct {
     Arena_Block *current;
 } Arena;
 
-void *arena_alloc(Arena *arena, size_t size);
-void arena_reset(Arena *arena);
-void arena_free(Arena *arena);
+void *ArenaAlloc(Arena *arena, size_t size);
+void ArenaReset(Arena *arena);
+void ArenaFree(Arena *arena);
 
 #if !defined(ARENA_MALLOC) || !defined(ARENA_FREE)
 #include <stdlib.h>
@@ -42,7 +42,7 @@ void arena_free(Arena *arena);
 #ifdef MS_ARENA_IMPLEMENTATION
 #undef MS_ARENA_IMPLEMENTATION
 
-static Arena_Block *new_arena_block(size_t cap)
+static Arena_Block *NewArenaBlock(size_t cap)
 {
     size_t s = sizeof(Arena_Block) + cap;
     Arena_Block *block = (Arena_Block*)ARENA_MALLOC(s);
@@ -52,32 +52,32 @@ static Arena_Block *new_arena_block(size_t cap)
     return block;
 }
 
-static void free_arena_block(Arena_Block *block)
+static void FreeArenaBlock(Arena_Block *block)
 {
-    if (block->next) free_arena_block(block);
+    if (block->next) FreeArenaBlock(block);
     ARENA_FREE(block);
 }
 
-void *arena_alloc(Arena *arena, size_t size)
+void *ArenaAlloc(Arena *arena, size_t size)
 {
     if (!arena->first || !arena->current)
     {
-        arena->first = arena->current = new_arena_block(MS_ARENA_MIN_CAP);
+        arena->first = arena->current = NewArenaBlock(MS_ARENA_MIN_CAP);
     }
-
+    
     if (arena->current->end + size > arena->current->cap)
     {
-        arena->current->next = new_arena_block(size > MS_ARENA_MIN_CAP ? size : MS_ARENA_MIN_CAP);
+        arena->current->next = NewArenaBlock(size > MS_ARENA_MIN_CAP ? size : MS_ARENA_MIN_CAP);
         arena->current = arena->current->next;
     }
-
+    
     void *reg = &arena->current->block[arena->current->end];
     arena->current->end += size;
-
+    
     return reg;
 }
 
-void arena_reset(Arena *arena)
+void ArenaReset(Arena *arena)
 {
 	if (!arena->first) return;
 	arena->current = arena->first;
@@ -88,10 +88,10 @@ void arena_reset(Arena *arena)
 	}
 }
 
-void arena_free(Arena *arena)
+void ArenaFree(Arena *arena)
 {
 	if (!arena->first) return;
-    free_arena_block(arena->first);
+    FreeArenaBlock(arena->first);
 }
 
 #endif

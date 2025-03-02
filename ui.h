@@ -13,8 +13,8 @@
 #define FONT_SIZE 20
 
 typedef enum UI_Axis2 {
-    UI_Axis2_x,
-    UI_Axis2_y,
+    UI_Axis2_X,
+    UI_Axis2_Y,
     UI_Axis2_COUNT,
 } UI_Axis2;
 
@@ -51,17 +51,17 @@ struct UI_Node {
     UI_Node *first_child;
     UI_Node *next;
     UI_Node *parent;
-
+    
     usize child_count;
-
+    
     // Calculated every frame;
     f32 pos_start[UI_Axis2_COUNT];
     Rect dim;
-
+    
     UI_Size size[UI_Axis2_COUNT];
-
+    
     UI_Flags flags;
-
+    
     usize hash;
     String string;
     f32 pad[UI_Axis2_COUNT];
@@ -69,9 +69,9 @@ struct UI_Node {
 
 typedef struct UI_State {
     Arena node_arena;
-
+    
     f32 pad[UI_Axis2_COUNT];
-
+    
     UI_Node *root_node;
     UI_Node *parent;
 } UI_State;
@@ -80,92 +80,91 @@ extern UI_State ui_state;
 
 // Helpers
 
-usize hash_string(u8 *str, usize len);
-#define hash_String(s) hash_string((s).str, (s).len)
+usize HashString(String str);
 
-UI_Node *ui_make_node(UI_Flags flags, String id);
+UI_Node *UI_MakeNode(UI_Flags flags, String id);
 
 // Builders
 
-void ui_init(void);
-void ui_deinit(void);
+void UI_Init(void);
+void UI_Deinit(void);
 
-void ui_build_begin(void);
-void ui_build_end(void);
+void UI_BuildBegin(void);
+void UI_BuildEnd(void);
 
-void ui_push_parent(UI_Node *parent);
-void ui_pop_parent(void);
+void UI_PushParent(UI_Node *parent);
+void UI_PopParent(void);
 
-void ui_set_text_pad_x(f32 val);
-void ui_set_text_pad_y(f32 val);
+void UI_SetPadX(f32 val);
+void UI_SetPadY(f32 val);
 
-UI_Node *ui_panel(String id);
-UI_Node *ui_label(String label);
+UI_Node *UI_Panel(String id);
+UI_Node *UI_Label(String label);
 
-void ui_layout(UI_Node *node);
+void UI_Layout(UI_Node *node);
 
-void ui_draw(UI_Node *node);
+void UI_Draw(UI_Node *node);
 
 #ifdef IMPL
 
 UI_State ui_state;
 
-usize hash_string(u8 *str, usize len) {
+usize HashString(String str) {
     usize hash = 2166136261u;
-    for (usize i = 0; i < len; ++i) {
-        hash ^= (u8)str[i];
+    for (usize i = 0; i < str.len; ++i) {
+        hash ^= (u8)str.str[i];
         hash *= 16777619;
     }
     return hash;
 }
 
-void ui_init(void) {
-    UI_Node *node = arena_alloc(&ui_state.node_arena, sizeof(UI_Node));
+void UI_Init(void) {
+    UI_Node *node = ArenaAlloc(&ui_state.node_arena, sizeof(UI_Node));
     memset(node, 0, sizeof(*node));
-
+    
     String id = S("_root");
-
+    
     node->string = id;
-    node->hash = hash_String(id);
+    node->hash = HashString(id);
     node->flags = UI_LAYOUT_V;
-
-    node->size[UI_Axis2_x].kind = UI_Size_Null;
-    node->size[UI_Axis2_y].kind = UI_Size_Null;
-
+    
+    node->size[UI_Axis2_X].kind = UI_Size_Null;
+    node->size[UI_Axis2_Y].kind = UI_Size_Null;
+    
     node->first_child = NULL;
     node->next = NULL;
     node->child_count = 0;
     node->parent = NULL;
-
+    
     ui_state.root_node = ui_state.parent = node;
-    ui_state.pad[UI_Axis2_x] = 10;
-    ui_state.pad[UI_Axis2_y] = 10;
+    ui_state.pad[UI_Axis2_X] = 10;
+    ui_state.pad[UI_Axis2_Y] = 10;
 }
 
-void ui_deinit(void) {
-    arena_free(&ui_state.node_arena);
+void UI_Deinit(void) {
+    ArenaFree(&ui_state.node_arena);
 }
 
-UI_Node *ui_make_node(UI_Flags flags, String id) {
-    UI_Node *node = arena_alloc(&ui_state.node_arena, sizeof(UI_Node));
+UI_Node *UI_MakeNode(UI_Flags flags, String id) {
+    UI_Node *node = ArenaAlloc(&ui_state.node_arena, sizeof(UI_Node));
     memset(node, 0, sizeof(*node));
-
+    
     node->string = id;
-    node->hash = hash_String(id);
+    node->hash = HashString(id);
     node->flags = flags;
-
-    node->size[UI_Axis2_x].kind = UI_Size_Null;
-    node->size[UI_Axis2_y].kind = UI_Size_Null;
-
+    
+    node->size[UI_Axis2_X].kind = UI_Size_Null;
+    node->size[UI_Axis2_Y].kind = UI_Size_Null;
+    
     node->first_child = NULL;
     node->next = NULL;
     node->child_count = 0;
-
-    node->pad[UI_Axis2_x] = ui_state.pad[UI_Axis2_x];
-    node->pad[UI_Axis2_y] = ui_state.pad[UI_Axis2_y];
-
+    
+    node->pad[UI_Axis2_X] = ui_state.pad[UI_Axis2_X];
+    node->pad[UI_Axis2_Y] = ui_state.pad[UI_Axis2_Y];
+    
     node->parent = ui_state.parent;
-
+    
     UI_Node *pchild = ui_state.parent->first_child;
     if (pchild) {
         while (pchild->next) pchild = pchild->next;
@@ -173,96 +172,96 @@ UI_Node *ui_make_node(UI_Flags flags, String id) {
     } else {
         ui_state.parent->first_child = node;
     }
-
-
+    
+    
     return node;
 }
 
-void ui_build_begin(void) {
+void UI_BuildBegin(void) {
     // ui_state.root_node =
 }
 
-void ui_build_end(void) {
-
+void UI_BuildEnd(void) {
+    
 }
 
-void ui_push_parent(UI_Node *parent) {
+void UI_PushParent(UI_Node *parent) {
     ui_state.parent = parent;
 }
 
-void ui_pop_parent(void) {
+void UI_PopParent(void) {
     ui_state.parent = ui_state.parent->parent;
 }
 
-void ui_set_pad_x(f32 val) {
-    ui_state.pad[UI_Axis2_x] = val;
+void UI_SetPadX(f32 val) {
+    ui_state.pad[UI_Axis2_X] = val;
 }
 
-void ui_set_pad_y(f32 val) {
-    ui_state.pad[UI_Axis2_y] = val;
+void UI_SetPadY(f32 val) {
+    ui_state.pad[UI_Axis2_Y] = val;
 }
 
-UI_Node *ui_panel(String id) {
-    UI_Node *panel_node = ui_make_node(UI_DRAW_BACKGROUND | UI_LAYOUT_H, id);
-    panel_node->size[UI_Axis2_x].kind = UI_Size_Children_Sum;
-    panel_node->size[UI_Axis2_y].kind = UI_Size_Children_Sum;
+UI_Node *UI_Panel(String id) {
+    UI_Node *panel_node = UI_MakeNode(UI_DRAW_BACKGROUND | UI_LAYOUT_H, id);
+    panel_node->size[UI_Axis2_X].kind = UI_Size_Children_Sum;
+    panel_node->size[UI_Axis2_Y].kind = UI_Size_Children_Sum;
     return panel_node;
 }
 
-UI_Node *ui_label(String label) {
-    UI_Node *label_node = ui_make_node(UI_DRAW_TEXT | UI_DRAW_BACKGROUND, label);
-    label_node->size[UI_Axis2_x].kind = UI_Size_Text_Content;
-    label_node->size[UI_Axis2_y].kind = UI_Size_Text_Content;
-
+UI_Node *UI_Label(String label) {
+    UI_Node *label_node = UI_MakeNode(UI_DRAW_TEXT | UI_DRAW_BACKGROUND, label);
+    label_node->size[UI_Axis2_X].kind = UI_Size_Text_Content;
+    label_node->size[UI_Axis2_Y].kind = UI_Size_Text_Content;
+    
     UI_Node *child = ui_state.parent->first_child;
     while (child) child = child->next;
-
+    
     child = label_node;
     ++ui_state.parent->child_count;
-
+    
     return label_node;
 }
 
 // FIXME: change from iterating over the children to building self with parent as ref, maybe.
-void ui_layout(UI_Node *node)
+void UI_Layout(UI_Node *node)
 {
     Vector2 text_size;
     UI_Node *child;
     if (!node) return;
-
-    node->pos_start[UI_Axis2_x] = 0;
-    node->pos_start[UI_Axis2_y] = 0;
-
+    
+    node->pos_start[UI_Axis2_X] = 0;
+    node->pos_start[UI_Axis2_Y] = 0;
+    
     UI_Node *parent = node->parent;
-
+    
     if (!parent) {
-        ui_layout(node->first_child);
+        UI_Layout(node->first_child);
         goto exit; // This should only be true for the root node.
     }
-
-    node->pos_start[UI_Axis2_x] = parent->pos_start[UI_Axis2_x]+node->pad[UI_Axis2_x];
-    node->pos_start[UI_Axis2_y] = parent->pos_start[UI_Axis2_y]+node->pad[UI_Axis2_y];
-
-    node->dim.xy[UI_Axis2_x] = parent->pos_start[UI_Axis2_x];
-    node->dim.xy[UI_Axis2_y] = parent->pos_start[UI_Axis2_y];
-
-    ui_layout(node->first_child);
-
-    for (int ax = UI_Axis2_x; ax < UI_Axis2_COUNT; ++ax)
+    
+    node->pos_start[UI_Axis2_X] = parent->pos_start[UI_Axis2_X]+node->pad[UI_Axis2_X];
+    node->pos_start[UI_Axis2_Y] = parent->pos_start[UI_Axis2_Y]+node->pad[UI_Axis2_Y];
+    
+    node->dim.xy[UI_Axis2_X] = parent->pos_start[UI_Axis2_X];
+    node->dim.xy[UI_Axis2_Y] = parent->pos_start[UI_Axis2_Y];
+    
+    UI_Layout(node->first_child);
+    
+    for (int ax = UI_Axis2_X; ax < UI_Axis2_COUNT; ++ax)
     {
         switch (node->size[ax].kind)
         {
-        case UI_Size_Null: break;
-        case UI_Size_Parent_Percent:
+            case UI_Size_Null: break;
+            case UI_Size_Parent_Percent:
             node->dim.wh[ax] = parent->dim.wh[ax]*node->size[ax].value;
             break;
-        case UI_Size_Pixels:
+            case UI_Size_Pixels:
             node->dim.wh[ax] = node->size[ax].value;
             break;
-        case UI_Size_Children_Sum:
+            case UI_Size_Children_Sum:
             node->dim.wh[ax] = node->pos_start[ax]-node->dim.xy[ax] + node->pad[ax];
-
-            // ui_layout(node->first_child);
+            
+            // UI_Layout(node->first_child);
             if (node->dim.wh[ax] == 2*node->pad[ax]) {
                 child = node->first_child;
                 while (child) {
@@ -271,39 +270,39 @@ void ui_layout(UI_Node *node)
                 }
             }
             break;
-        case UI_Size_Text_Content:
+            case UI_Size_Text_Content:
             text_size = MeasureTextEx(
-                GetFontDefault(),
-                (const char*)node->string.str,
-                FONT_SIZE,
-                FONT_SIZE/10
-            );
+                                      GetFontDefault(),
+                                      (const char*)node->string.str,
+                                      FONT_SIZE,
+                                      FONT_SIZE/10
+                                      );
             f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y};
             node->dim.wh[ax] = xy[ax]+2*node->pad[ax];
             break;
-        default:
+            default:
             break;
         }
     }
-
+    
     if (parent->flags & UI_LAYOUT_H) {
-        parent->pos_start[UI_Axis2_x] += node->dim.wh[UI_Axis2_x];
+        parent->pos_start[UI_Axis2_X] += node->dim.wh[UI_Axis2_X];
     }
     if (parent->flags & UI_LAYOUT_V) {
-        parent->pos_start[UI_Axis2_y] += node->dim.wh[UI_Axis2_y];
+        parent->pos_start[UI_Axis2_Y] += node->dim.wh[UI_Axis2_Y];
     }
-
-exit:
-    ui_layout(node->next);
+    
+    exit:
+    UI_Layout(node->next);
 }
 
-void ui_draw(UI_Node *node) {
+void UI_Draw(UI_Node *node) {
     if (!node) return;
     Rectangle r = {
-        .x = node->dim.xy[UI_Axis2_x],
-        .y = node->dim.xy[UI_Axis2_y],
-        .width = node->dim.wh[UI_Axis2_x],
-        .height = node->dim.wh[UI_Axis2_y],
+        .x = node->dim.xy[UI_Axis2_X],
+        .y = node->dim.xy[UI_Axis2_Y],
+        .width = node->dim.wh[UI_Axis2_X],
+        .height = node->dim.wh[UI_Axis2_Y],
     };
     const Color colors[] = {
         YELLOW,
@@ -320,19 +319,19 @@ void ui_draw(UI_Node *node) {
         VIOLET,
     };
     // printf("%p %p %f %f %f %f\n", node, node->parent, r.x, r.y, r.width, r.height);
-
-
+    
+    
     if (node->flags & UI_DRAW_BACKGROUND) DrawRectangleRec(r, colors[node->hash%ArrayLen(colors)]);
     if (node->flags & UI_DRAW_TEXT) DrawText(
-        (const char *)node->string.str,
-        node->dim.xy[0]+node->pad[0],
-        node->dim.xy[1]+node->pad[1],
-        FONT_SIZE,
-        BLACK
-    );
-
-    ui_draw(node->first_child);
-    ui_draw(node->next);
+                                             (const char *)node->string.str,
+                                             node->dim.xy[0]+node->pad[0],
+                                             node->dim.xy[1]+node->pad[1],
+                                             FONT_SIZE,
+                                             BLACK
+                                             );
+    
+    UI_Draw(node->first_child);
+    UI_Draw(node->next);
 }
 
 #endif
