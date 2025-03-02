@@ -143,12 +143,11 @@ usize hash_string(String str) {
 void ui_init(void) {
     memory_set(&ui_state, 0, sizeof(UI_State));
     
-    ui_state.static_arena = arena_new();
+    ui_state.arena = arena_new();
     
-    ui_state.build_arena[0] = arena_new();
-    ui_state.build_arena[1] = arena_new();
+    ui_state.build_arena = arena_new();
     
-    UI_Node *node = arena_alloc(ui_state.static_arena, sizeof(UI_Node));
+    UI_Node *node = arena_alloc(ui_state.arena, sizeof(UI_Node));
     memory_set(node, 0, sizeof(*node));
     
     String id = S("_root");
@@ -171,9 +170,8 @@ void ui_init(void) {
 }
 
 void ui_deinit(void) {
-    arena_free(ui_state.build_arena[0]);
-    arena_free(ui_state.build_arena[1]);
-    arena_free(ui_state.static_arena);
+    arena_free(ui_state.build_arena);
+    arena_free(ui_state.arena);
 }
 
 UI_Node *ui_make_node(UI_Flags flags, String id) {
@@ -188,7 +186,7 @@ UI_Node *ui_make_node(UI_Flags flags, String id) {
     if (idx < 0) // New node
         hmput(ui_state.node_data, node->hash, (UI_Node_Data){0});
     else
-        ui_state.node_data[idx].frame_number = ui_state.frame_number;
+        ui_state.node_data[idx].value.frame_number = ui_state.frame_number;
     
     node->size[UI_Axis2_X].kind = UI_Size_Null;
     node->size[UI_Axis2_Y].kind = UI_Size_Null;
