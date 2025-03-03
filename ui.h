@@ -1,6 +1,21 @@
 #ifndef _UI_H
 #define _UI_H
 
+/*
+
+Frame sequence:
+- ui_begin_build
+  - Reset
+- ui_make_node
+  - Construction & Event dipatch based on the last frame
+- ui_end_build
+  - Layout
+  - Handle events for this frame
+  - Draw
+  - Prune/Remove unused cache slots
+
+*/
+
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -114,6 +129,8 @@ void ui_deinit(void);
 void ui_build_begin(void);
 void ui_build_end(void);
 
+void ui_prune(void);
+
 void ui_push_parent(UI_Node *parent);
 void ui_pop_parent(void);
 
@@ -225,7 +242,18 @@ void ui_build_end(void) {
     ui_layout(ui_state.root_node);
     // ui_dispach_events();
     ui_draw(ui_state.root_node);
-    // ui_prune();
+    ui_prune();
+}
+
+void ui_prune(void) {
+    for (usize i = 0; i < hmlen(ui_state.node_data); ++i) {
+        if (ui_state.node_data[i].value.frame_number != ui_state.frame_number && 
+            ui_state.node_data[i].key != ui_state.root_node->hash) {
+            hmdel(ui_state.node_data, ui_state.node_data[i].key);
+            printf("prune idx: %llu key: %llu\n", i, ui_state.node_data[i].key);
+            // TODO: Investigate the 4th idx that is being pruned constantly...
+        }
+    }
 }
 
 void ui_push_parent(UI_Node *parent) {

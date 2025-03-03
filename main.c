@@ -7,6 +7,9 @@
 #define BASE_ARENA
 #define BASE_IMPLEMENTATION
 #include "base.h"
+#define STB_DS_IMPLEMENTATION
+#include "stb_ds.h"
+#undef STB_DS_IMPLEMENTATION
 #define IMPL
 #include "ui.h"
 
@@ -31,7 +34,7 @@ int main() {
     ui_state.root_node->dim.wh[1] = GetRenderHeight();
     
     
-    ui_layout(ui_state.root_node);
+    // ui_layout(ui_state.root_node);
     
     // return 0;
     
