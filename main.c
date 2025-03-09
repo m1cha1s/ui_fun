@@ -61,6 +61,24 @@ int main() {
         }
         ui_pop_parent();
         
+        panel = ui_panel(S("buttons"));
+        ui_push_parent(panel);
+
+        if (ui_button(S("G")).pressed) {
+            printf("Pressed the button\n");
+            gello = !gello;
+        }
+        if (ui_button(S("G on")).pressed) {
+            printf("Pressed the button 1\n");
+            gello = 1;
+        }
+        if (ui_button(S("G off")).pressed) {
+            printf("Pressed the button 2\n");
+            gello = 0;
+        }
+
+        ui_pop_parent();
+        
         if (gello) {
             panel = ui_panel(S("50%"));
             panel->size[UI_Axis2_X].kind = UI_Size_Parent_Percent;

@@ -52,13 +52,8 @@ typedef struct UI_Size {
     f32 strictness; // TODO: Use it...
 } UI_Size;
 
-typedef enum UI_Event_Kind {
-    UI_EVENT_PRESSED,
-    UI_EVENT_RELEASED,
-} UI_Event_Kind;
-
 typedef struct UI_Event {
-    UI_Event_Kind kind;
+    u8 pressed;
 } UI_Event;
 
 typedef u32 UI_Flags;
@@ -90,10 +85,6 @@ struct UI_Node {
     f32 pos_start[UI_Axis2_COUNT];
     Rect dim;
 };
-
-typedef struct UI_Event {
-    b8 clicked;
-} UI_Event;
 
 typedef struct UI_Node_Data {
     usize frame_number;
@@ -141,6 +132,7 @@ void ui_build_begin(void);
 void ui_build_end(void);
 
 void ui_prune(void);
+void ui_dispatch_events(void);
 
 void ui_push_parent(UI_Node *parent);
 void ui_pop_parent(void);
@@ -150,6 +142,7 @@ void ui_set_pad_y(f32 val);
 
 UI_Node *ui_panel(String id);
 UI_Node *ui_label(String label);
+UI_Event ui_button(String label);
 
 void ui_layout(UI_Node *node);
 
@@ -235,7 +228,9 @@ UI_Node *ui_make_node(UI_Flags flags, String id) {
     } else {
         ui_state.parent->first_child = node;
     }
-    
+
+    ui_state.parent->child_count += 1;
+
     return node;
 }
 
@@ -251,7 +246,7 @@ void ui_build_begin(void) {
 
 void ui_build_end(void) {
     ui_layout(ui_state.root_node);
-    // ui_dispach_events();
+    ui_dispatch_events();
     ui_draw(ui_state.root_node);
     ui_prune();
 }
@@ -265,6 +260,32 @@ void ui_prune(void) {
             hmdel(ui_state.node_data, ui_state.node_data[i].key);
             // TODO: Investigate the 4th idx that is being pruned constantly...
         }
+    }
+}
+
+static int point_in_rect(Vector2 p, Rect r) {
+    return (p.x > r.xy[0]) && (p.x < r.xy[0]+r.wh[0]) && (p.y > r.xy[1]) && (p.y < r.xy[1]+r.wh[1]);
+}
+
+void ui_dispatch_events(void) {
+    if (IsMouseButtonReleased(0)) {
+        UI_Node *current = ui_state.root_node;
+        Vector2 mouse_pos = GetMousePosition();
+
+        do {
+            if (point_in_rect(mouse_pos, current->dim)) {
+                if (current->child_count) {
+                    current = current->first_child;
+                    continue;
+                } else {
+                    UI_Node_Data_KV *data = hmgetp(ui_state.node_data, current->hash);
+                    data->value.event = (UI_Event){.pressed = 1};
+                    current = current->parent->next;
+                }
+            } else {
+                current = current->next;
+            }
+        } while (current);
     }
 }
 
@@ -292,17 +313,27 @@ UI_Node *ui_panel(String id) {
 }
 
 UI_Node *ui_label(String label) {
-    UI_Node *label_node = ui_make_node(UI_DRAW_TEXT | UI_DRAW_BACKGROUND, label);
+    UI_Node *label_node = ui_make_node(UI_DRAW_TEXT, label);
     label_node->size[UI_Axis2_X].kind = UI_Size_Text_Content;
     label_node->size[UI_Axis2_Y].kind = UI_Size_Text_Content;
     
-    UI_Node *child = ui_state.parent->first_child;
-    while (child) child = child->next;
-    
-    child = label_node;
-    ++ui_state.parent->child_count;
-    
     return label_node;
+}
+
+UI_Event ui_button(String label) {
+    UI_Node *button_node = ui_make_node(UI_DRAW_TEXT | UI_DRAW_BACKGROUND, label);
+    
+    button_node->size[UI_Axis2_X].kind = UI_Size_Text_Content;
+    button_node->size[UI_Axis2_Y].kind = UI_Size_Text_Content;
+    
+    ssize idx = hmgeti(ui_state.node_data, button_node->hash); // idx should never be -1
+    assert(idx >= 0);
+    
+    UI_Event res = ui_state.node_data[idx].value.event;
+
+    ui_state.node_data[idx].value.event = (UI_Event){0};
+
+    return res;
 }
 
 // FIXME: change from iterating over the children to building self with parent as ref, maybe.
