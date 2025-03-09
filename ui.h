@@ -60,7 +60,7 @@ typedef u32 UI_Flags;
 enum {
     UI_DRAW_TEXT       = (1ull<<0),
     UI_DRAW_BACKGROUND = (1ull<<1),
-    UI_DRAW_FRAME      = (1ull<<2),
+    UI_DRAW_BORDER     = (1ull<<2),
     UI_CLICKABLE       = (1ull<<3),
     UI_LAYOUT_V        = (1ull<<4),
     UI_LAYOUT_H        = (1ull<<5),
@@ -322,7 +322,7 @@ UI_Node *ui_label(String label) {
 }
 
 UI_Event ui_button(String label) {
-    UI_Node *button_node = ui_make_node(UI_DRAW_TEXT | UI_DRAW_BACKGROUND, label);
+    UI_Node *button_node = ui_make_node(UI_DRAW_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER, label);
     
     button_node->size[UI_Axis2_X].kind = UI_Size_Text_Content;
     button_node->size[UI_Axis2_Y].kind = UI_Size_Text_Content;
@@ -436,6 +436,8 @@ void ui_draw(UI_Node *node) {
     
     if (node->flags & UI_DRAW_BACKGROUND)
         DrawRectangleRec(r, colors[node->hash%ArrayLen(colors)]);
+    if (node->flags & UI_DRAW_BORDER)
+        DrawRectangleLinesEx(r, 5, colors[(node->hash+1)%ArrayLen(colors)]);
     if (node->flags & UI_DRAW_TEXT)
         DrawText((const char *)node->string.str,
                  node->dim.xy[0]+node->pad[0],
