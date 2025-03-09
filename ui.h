@@ -88,6 +88,8 @@ typedef struct UI_Event {
 
 typedef struct UI_Node_Data {
     usize frame_number;
+    
+    String key;
 
     // Last frame event info also lands here, used by builders to report events to the caller.
     UI_Event event;
@@ -201,7 +203,7 @@ UI_Node *ui_make_node(UI_Flags flags, String id) {
 
     ssize idx = hmgeti(ui_state.node_data, node->hash);
     if (idx < 0) // New node
-        hmput(ui_state.node_data, node->hash, (UI_Node_Data){0});
+        hmput(ui_state.node_data, node->hash, ((UI_Node_Data){.key=id, .frame_number=ui_state.frame_number}));
     else
         ui_state.node_data[idx].value.frame_number = ui_state.frame_number;
     
@@ -249,8 +251,9 @@ void ui_prune(void) {
     for (usize i = 0; i < hmlen(ui_state.node_data); ++i) {
         if (ui_state.node_data[i].value.frame_number != ui_state.frame_number && 
             ui_state.node_data[i].key != ui_state.root_node->hash) {
+            UI_Node_Data_KV node_data_kv = ui_state.node_data[i];
+            printf("prune idx: %llu key: %.*s(%llu)\n", i, node_data_kv.value.key.len, node_data_kv.value.key.str, node_data_kv.key);
             hmdel(ui_state.node_data, ui_state.node_data[i].key);
-            printf("prune idx: %llu key: %llu\n", i, ui_state.node_data[i].key);
             // TODO: Investigate the 4th idx that is being pruned constantly...
         }
     }
@@ -390,12 +393,14 @@ void ui_draw(UI_Node *node) {
         VIOLET,
     };
     
-    if (node->flags & UI_DRAW_BACKGROUND) DrawRectangleRec(r, colors[node->hash%ArrayLen(colors)]);
-    if (node->flags & UI_DRAW_TEXT) DrawText((const char *)node->string.str,
-                                             node->dim.xy[0]+node->pad[0],
-                                             node->dim.xy[1]+node->pad[1],
-                                             FONT_SIZE,
-                                             BLACK);
+    if (node->flags & UI_DRAW_BACKGROUND)
+        DrawRectangleRec(r, colors[node->hash%ArrayLen(colors)]);
+    if (node->flags & UI_DRAW_TEXT)
+        DrawText((const char *)node->string.str,
+                 node->dim.xy[0]+node->pad[0],
+                 node->dim.xy[1]+node->pad[1],
+                 FONT_SIZE,
+                 BLACK);
     
     ui_draw(node->first_child);
     ui_draw(node->next);

@@ -38,7 +38,12 @@ int main() {
     
     // return 0;
     
+    int gello = 1;
+    
     while (!WindowShouldClose()) {
+        if (IsKeyPressed(KEY_G)) gello = !gello;
+
+
         BeginDrawing();
         
         ClearBackground(WHITE);
@@ -56,14 +61,16 @@ int main() {
         }
         ui_pop_parent();
         
-        panel = ui_panel(S("50%"));
-        panel->size[UI_Axis2_X].kind = UI_Size_Parent_Percent;
-        panel->size[UI_Axis2_X].value = 0.3;
-        ui_push_parent(panel);
-        {
-            UI_Node *a = ui_label(S("Gello"));
+        if (gello) {
+            panel = ui_panel(S("50%"));
+            panel->size[UI_Axis2_X].kind = UI_Size_Parent_Percent;
+            panel->size[UI_Axis2_X].value = 0.3;
+            ui_push_parent(panel);
+            {
+                UI_Node *a = ui_label(S("Gello"));
+            }
+            ui_pop_parent();
         }
-        ui_pop_parent();
         
         ui_build_end();
         
