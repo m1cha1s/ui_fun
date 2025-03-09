@@ -5,14 +5,14 @@
 
 Frame sequence:
 - ui_begin_build
-  - Reset
+  - [x] Reset
 - ui_make_node
-  - Construction & Event dipatch based on the last frame
+  - [ ] Construction & Event dispatch based on the last frame
 - ui_end_build
-  - Layout
-  - Handle events for this frame
-  - Draw
-  - Prune/Remove unused cache slots
+  - [x] Layout
+  - [ ] Handle events for this frame
+  - [x] Draw
+  - [x] Prune/Remove unused cache slots
 
 */
 
