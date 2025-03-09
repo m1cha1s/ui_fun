@@ -52,6 +52,15 @@ typedef struct UI_Size {
     f32 strictness; // TODO: Use it...
 } UI_Size;
 
+typedef enum UI_Event_Kind {
+    UI_EVENT_PRESSED,
+    UI_EVENT_RELEASED,
+} UI_Event_Kind;
+
+typedef struct UI_Event {
+    UI_Event_Kind kind;
+} UI_Event;
+
 typedef u32 UI_Flags;
 enum {
     UI_DRAW_TEXT       = (1ull<<0),
