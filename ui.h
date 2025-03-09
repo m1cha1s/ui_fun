@@ -240,6 +240,7 @@ void ui_build_begin(void) {
     ui_state.root_node->first_child = NULL;
     ui_state.root_node->parent = NULL;
     ui_state.root_node->next = NULL;
+    ui_state.root_node->child_count = 0;
 
     ui_state.frame_number += 1;
 }

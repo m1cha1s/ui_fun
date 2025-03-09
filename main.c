@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include <raylib.h>
 
@@ -14,6 +15,26 @@
 #include "ui.h"
 
 Arena *temp_arena;
+
+char *tprintf(char *fmt, ...) {
+    va_list args;
+    ssize buf_size;
+    char *buf;
+
+    va_start(args, fmt);
+    buf_size = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+
+    buf = arena_alloc(temp_arena, buf_size+1);
+
+    va_start(args, fmt);
+    vsnprintf(buf, buf_size+1, fmt, args);
+    va_end(args);
+
+    buf[buf_size] = 0;
+
+    return buf;
+}
 
 int main() {
     temp_arena = arena_new();
@@ -89,8 +110,13 @@ int main() {
             }
             ui_pop_parent();
         }
-        
+
+        char *msg = tprintf("root node child count: %d", ui_state.root_node->child_count);
+        ui_label((String){msg, strlen(msg)});
+
         ui_build_end();
+
+
         
         arena_reset(temp_arena);
         EndDrawing();
