@@ -118,11 +118,13 @@ void *arena_alloc(Arena *arena, size_t size)
         arena->first = arena->current = new_arena_block(BASE_ARENA_MIN_CAP);
     }
     
-    if (arena->current->end + size > arena->current->cap)
-    {
-        arena->current->next = new_arena_block(size > BASE_ARENA_MIN_CAP ? size : BASE_ARENA_MIN_CAP);
+    do {
+        if (!arena->current->next) {
+            printf("arena_alloc: no next");
+            arena->current->next = new_arena_block(size > BASE_ARENA_MIN_CAP ? size : BASE_ARENA_MIN_CAP);
+        }
         arena->current = arena->current->next;
-    }
+    } while ((arena->current->end + size) > arena->current->cap);
     
     void *reg = &arena->current->block[arena->current->end];
     arena->current->end += size;
@@ -132,6 +134,7 @@ void *arena_alloc(Arena *arena, size_t size)
 
 void arena_reset(Arena *arena)
 {
+    // printf("arena_reset\n");
 	if (!arena->first) return;
 	arena->current = arena->first;
     while (arena->current->next)

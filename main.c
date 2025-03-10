@@ -60,6 +60,7 @@ int main() {
     // return 0;
     
     int gello = 1;
+    int list_size = 0;
     
     while (!WindowShouldClose()) {
         if (IsKeyPressed(KEY_G)) gello = !gello;
@@ -111,13 +112,46 @@ int main() {
             ui_pop_parent();
         }
 
+        panel = ui_panel(S("list"));
+        panel->flags &= ~UI_LAYOUT_H;
+        panel->flags |= UI_LAYOUT_V;
+        ui_push_parent(panel);
+        {
+            panel = ui_panel(S("list ctrl"));
+            ui_push_parent(panel);
+            {
+                if (ui_button(S("list +"))) {
+                    ++list_size;
+                }
+                if (ui_button(S("list -")) && list_size > 0) {
+                    --list_size;
+                }
+                char *list_size_str = tprintf("list size: %d", list_size);
+                ui_label((String){.str=list_size_str, .len=strlen(list_size_str)});
+            }
+            ui_pop_parent();
+
+            if (list_size) {
+                panel = ui_panel(S("list list"));
+                panel->flags &= ~UI_LAYOUT_H;
+                panel->flags |= UI_LAYOUT_V;
+                ui_push_parent(panel);
+                {
+                    for (int i = 0; i < list_size; ++i) {
+                        char *l_name = tprintf("list item %d", i+1);
+                        ui_label((String){.str=l_name, .len=strlen(l_name)});
+                    }        
+                }
+                ui_pop_parent();
+            }
+        }
+        ui_pop_parent();
+
         char *msg = tprintf("root node child count: %d", ui_state.root_node->child_count);
         ui_label((String){msg, strlen(msg)});
 
         ui_build_end();
 
-
-        
         arena_reset(temp_arena);
         EndDrawing();
     }
