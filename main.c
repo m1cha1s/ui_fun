@@ -85,15 +85,15 @@ int main() {
         panel = ui_panel(S("buttons"));
         ui_push_parent(panel);
 
-        if (ui_button(S("G")).pressed) {
+        if (ui_button(S("G"))) {
             printf("Pressed the button\n");
             gello = !gello;
         }
-        if (ui_button(S("G on")).pressed) {
+        if (ui_button(S("G on"))) {
             printf("Pressed the button 1\n");
             gello = 1;
         }
-        if (ui_button(S("G off")).pressed) {
+        if (ui_button(S("G off"))) {
             printf("Pressed the button 2\n");
             gello = 0;
         }

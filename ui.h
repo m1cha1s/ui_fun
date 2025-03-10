@@ -28,6 +28,10 @@ Frame sequence:
 
 #define FONT_SIZE 20
 
+typedef struct Vec2 {
+    f32 x, y;
+} Vec2;
+
 typedef enum UI_Axis2 {
     UI_Axis2_X,
     UI_Axis2_Y,
@@ -52,8 +56,24 @@ typedef struct UI_Size {
     f32 strictness; // TODO: Use it...
 } UI_Size;
 
+typedef enum UI_Key {
+    UI_MOUSE_LEFT,
+    UI_MOUSE_RIGHT,
+} UI_Key;
+
+typedef enum UI_Event_Kind {
+    UI_EVENT_NULL,
+    UI_EVENT_PRESS,
+    UI_EVENT_RELEASE,
+    UI_EVENT_MOUSE_MOVE,
+    UI_EVENT_SCROLL,
+} UI_Event_Kind;
+
 typedef struct UI_Event {
-    u8 pressed;
+    UI_Event_Kind kind;
+    UI_Key key;
+    Vec2 pos;
+    Vec2 delta;
 } UI_Event;
 
 typedef u32 UI_Flags;
@@ -142,7 +162,7 @@ void ui_set_pad_y(f32 val);
 
 UI_Node *ui_panel(String id);
 UI_Node *ui_label(String label);
-UI_Event ui_button(String label);
+int ui_button(String label);
 
 void ui_layout(UI_Node *node);
 
@@ -246,10 +266,10 @@ void ui_build_begin(void) {
 }
 
 void ui_build_end(void) {
+    ui_prune();
     ui_layout(ui_state.root_node);
     ui_dispatch_events();
     ui_draw(ui_state.root_node);
-    ui_prune();
 }
 
 void ui_prune(void) {
@@ -259,28 +279,39 @@ void ui_prune(void) {
             UI_Node_Data_KV node_data_kv = ui_state.node_data[i];
             printf("prune idx: %llu key: %.*s(%llu)\n", i, node_data_kv.value.key.len, node_data_kv.value.key.str, node_data_kv.key);
             hmdel(ui_state.node_data, ui_state.node_data[i].key);
-            // TODO: Investigate the 4th idx that is being pruned constantly...
+        } else {
+            ui_state.node_data[i].value.event = (UI_Event){0};
         }
     }
 }
 
-static int point_in_rect(Vector2 p, Rect r) {
+static int point_in_rect(Vec2 p, Rect r) {
     return (p.x > r.xy[0]) && (p.x < r.xy[0]+r.wh[0]) && (p.y > r.xy[1]) && (p.y < r.xy[1]+r.wh[1]);
 }
 
 void ui_dispatch_events(void) {
-    if (IsMouseButtonReleased(0)) {
+    int m_left_pre = IsMouseButtonPressed(0);
+    int m_left_rel = IsMouseButtonReleased(0);
+    int m_right_pre = IsMouseButtonPressed(1);
+    int m_right_rel = IsMouseButtonReleased(1);
+
+    if (m_left_pre || m_left_rel || m_right_pre || m_right_rel) {
         UI_Node *current = ui_state.root_node;
         Vector2 mouse_pos = GetMousePosition();
+        Vec2 m_pos = (Vec2){mouse_pos.x, mouse_pos.y};
 
         do {
-            if (point_in_rect(mouse_pos, current->dim)) {
+            if (point_in_rect(m_pos, current->dim)) {
                 if (current->child_count) {
                     current = current->first_child;
                     continue;
                 } else {
                     UI_Node_Data_KV *data = hmgetp(ui_state.node_data, current->hash);
-                    data->value.event = (UI_Event){.pressed = 1};
+                    data->value.event = (UI_Event){
+                        .kind=m_left_pre || m_right_pre ? UI_EVENT_PRESS : UI_EVENT_RELEASE, 
+                        .key=m_left_pre || m_left_rel ? UI_MOUSE_LEFT : UI_MOUSE_RIGHT, 
+                        .pos=m_pos,
+                    };
                     current = current->parent->next;
                 }
             } else {
@@ -321,7 +352,7 @@ UI_Node *ui_label(String label) {
     return label_node;
 }
 
-UI_Event ui_button(String label) {
+int ui_button(String label) {
     UI_Node *button_node = ui_make_node(UI_DRAW_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER, label);
     
     button_node->size[UI_Axis2_X].kind = UI_Size_Text_Content;
@@ -329,12 +360,10 @@ UI_Event ui_button(String label) {
     
     ssize idx = hmgeti(ui_state.node_data, button_node->hash); // idx should never be -1
     assert(idx >= 0);
+
+    UI_Event ev = ui_state.node_data[idx].value.event;
     
-    UI_Event res = ui_state.node_data[idx].value.event;
-
-    ui_state.node_data[idx].value.event = (UI_Event){0};
-
-    return res;
+    return ev.kind == UI_EVENT_PRESS && ev.key == UI_MOUSE_LEFT;
 }
 
 // FIXME: change from iterating over the children to building self with parent as ref, maybe.
