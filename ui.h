@@ -130,6 +130,10 @@ typedef struct UI_Node_Data_KV {
     UI_Node_Data value;
 } UI_Node_Data_KV;
 
+typedef enum UI_State_Mode {
+    UI_STATE_MODE_NAV,
+} UI_State_Mode;
+
 typedef struct UI_State {
     Arena *arena;
 
@@ -143,6 +147,8 @@ typedef struct UI_State {
     UI_Node *parent;
 
     UI_Node_Data_KV *node_data;
+
+    UI_State_Mode mode;
 
     UI_Event *event_buffer;
     usize focused;
@@ -201,6 +207,8 @@ void ui_init(void) {
     ui_state.arena = arena_new();
     
     ui_state.build_arena = arena_new();
+
+    ui_state.mode = UI_STATE_MODE_NAV;
     
     UI_Node *node = arena_alloc(ui_state.arena, sizeof(UI_Node));
     memory_set(node, 0, sizeof(*node));
@@ -345,12 +353,14 @@ void ui_collect_events(void) {
     if (IsMouseButtonReleased(0)) arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_RELEASE, .key=UI_MOUSE_LEFT, .pos=m_pos}));
     if (IsMouseButtonReleased(1)) arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_RELEASE, .key=UI_MOUSE_RIGHT, .pos=m_pos}));
 
-    if ((key=GetCharPressed())) {
-        arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key=key, .mod=mod}));
-    } else if (IsKeyPressed(KEY_TAB)) {
-        arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\t', .mod=mod}));
-    } else if (IsKeyPressed(KEY_ENTER)) {
-        arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\n', .mod=mod}));
+    if (ui_state.mode == UI_STATE_MODE_NAV) {
+        if ((key=GetCharPressed())) {
+            arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key=key, .mod=mod}));
+        } else if (IsKeyPressed(KEY_TAB)) {
+            arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\t', .mod=mod}));
+        } else if (IsKeyPressed(KEY_ENTER)) {
+            arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\n', .mod=mod}));
+        }
     }
 }
 
