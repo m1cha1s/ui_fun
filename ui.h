@@ -189,10 +189,10 @@ void ui_pop_parent(void);
 void ui_set_pad_x(f32 val);
 void ui_set_pad_y(f32 val);
 
-UI_Node *ui_panel(String id);
-UI_Node *ui_label(String label);
-int ui_button(String label);
-char *ui_text_input(String label);
+UI_Node *ui_panel(UI_Flags flags, String id);
+UI_Node *ui_label(UI_Flags flags, String label);
+int ui_button(UI_Flags flags, String label);
+char *ui_text_input(UI_Flags flags, String label);
 
 void ui_layout(UI_Node *node);
 
@@ -478,23 +478,23 @@ void ui_set_pad_y(f32 val) {
     ui_state->pad[UI_Axis2_Y] = val;
 }
 
-UI_Node *ui_panel(String id) {
-    UI_Node *panel_node = ui_make_node(UI_DRAW_BACKGROUND | UI_LAYOUT_H, id);
+UI_Node *ui_panel(UI_Flags flags, String id) {
+    UI_Node *panel_node = ui_make_node(UI_DRAW_BACKGROUND | UI_LAYOUT_H | flags, id);
     panel_node->size[UI_Axis2_X].kind = UI_Size_Children_Sum;
     panel_node->size[UI_Axis2_Y].kind = UI_Size_Children_Sum;
     return panel_node;
 }
 
-UI_Node *ui_label(String label) {
-    UI_Node *label_node = ui_make_node(UI_DRAW_TEXT, label);
+UI_Node *ui_label(UI_Flags flags, String label) {
+    UI_Node *label_node = ui_make_node(UI_DRAW_TEXT | flags, label);
     label_node->size[UI_Axis2_X].kind = UI_Size_Text_Content;
     label_node->size[UI_Axis2_Y].kind = UI_Size_Text_Content;
     
     return label_node;
 }
 
-int ui_button(String label) {
-    UI_Node *button_node = ui_make_node(UI_DRAW_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER, label);
+int ui_button(UI_Flags flags, String label) {
+    UI_Node *button_node = ui_make_node(UI_DRAW_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER | flags, label);
     
     button_node->size[UI_Axis2_X].kind = UI_Size_Text_Content;
     button_node->size[UI_Axis2_Y].kind = UI_Size_Text_Content;
@@ -507,8 +507,8 @@ int ui_button(String label) {
     return (ev.kind == UI_EVENT_PRESS && ev.key == UI_MOUSE_LEFT) || (ev.kind == UI_EVENT_NAV && ev.key == '\n');
 }
 
-char *ui_text_input(String label) {
-    UI_Node *text_input = ui_make_node(UI_DRAW_ED_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER | UI_TEXT_ED | UI_DRAW_CURSOR, label);
+char *ui_text_input(UI_Flags flags, String label) {
+    UI_Node *text_input = ui_make_node(UI_DRAW_ED_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER | UI_TEXT_ED | UI_DRAW_CURSOR | flags, label);
 
     text_input->size[UI_Axis2_X].kind = UI_Size_Ed_Text_Content;
     text_input->size[UI_Axis2_Y].kind = UI_Size_Ed_Text_Content;
@@ -623,7 +623,7 @@ void ui_layout(UI_Node *node)
                                           FONT_SIZE,
                                           FONT_SIZE/10
                                           );
-                f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y};
+                f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y ? text_size.y : FONT_SIZE};
                 node->dim.wh[ax] = xy[ax]+2*node->pad[ax];
                 break;
             case UI_Size_Ed_Text_Content: {
@@ -633,7 +633,7 @@ void ui_layout(UI_Node *node)
                                           FONT_SIZE,
                                           FONT_SIZE/10
                                           ) : (Vector2){0};
-                f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y};
+                f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y ? text_size.y : FONT_SIZE};
                 node->dim.wh[ax] = xy[ax]+2*node->pad[ax];
                 break;
             }
