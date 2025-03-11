@@ -349,6 +349,8 @@ void ui_collect_events(void) {
         arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key=key, .mod=mod}));
     } else if (IsKeyPressed(KEY_TAB)) {
         arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\t', .mod=mod}));
+    } else if (IsKeyPressed(KEY_ENTER)) {
+        arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\n', .mod=mod}));
     }
 }
 
@@ -407,6 +409,10 @@ void ui_dispatch_events(void) {
                     }
 
                 }
+                if (ev.key == '\n') {
+                    data = hmgetp(ui_state.node_data, ui_state.focused);
+                    data->value.event = ev;
+                }
                 break;
         }
     }
@@ -456,7 +462,7 @@ int ui_button(String label) {
 
     UI_Event ev = ui_state.node_data[idx].value.event;
     
-    return ev.kind == UI_EVENT_PRESS && ev.key == UI_MOUSE_LEFT;
+    return (ev.kind == UI_EVENT_PRESS && ev.key == UI_MOUSE_LEFT) || (ev.kind == UI_EVENT_NAV && ev.key == '\n');
 }
 
 // FIXME: change from iterating over the children to building self with parent as ref, maybe.
