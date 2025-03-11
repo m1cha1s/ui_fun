@@ -57,9 +57,15 @@ typedef struct UI_Size {
 } UI_Size;
 
 typedef enum UI_Key {
-    UI_MOUSE_LEFT,
+    UI_MOUSE_LEFT = 256, // After ASCII
     UI_MOUSE_RIGHT,
 } UI_Key;
+
+typedef u32 UI_Mod;
+enum {
+    UI_MOD_L_SHIFT = (1ull<<0),
+    UI_MOD_R_SHIFT = (1ull<<1),
+};
 
 typedef enum UI_Event_Kind {
     UI_EVENT_NULL,
@@ -67,11 +73,13 @@ typedef enum UI_Event_Kind {
     UI_EVENT_RELEASE,
     UI_EVENT_MOUSE_MOVE,
     UI_EVENT_SCROLL,
+    UI_EVENT_NAV,
 } UI_Event_Kind;
 
 typedef struct UI_Event {
     UI_Event_Kind kind;
     UI_Key key;
+    UI_Mod mod;
     Vec2 pos;
     Vec2 delta;
 } UI_Event;
@@ -90,8 +98,8 @@ typedef struct UI_Node UI_Node;
 struct UI_Node {
     // Builder filled
     UI_Node *parent;
-    UI_Node *first_child;
-    UI_Node *next;
+    UI_Node *first_child, *last_child;
+    UI_Node *next, *prev;
     usize child_count;
     
     f32 pad[UI_Axis2_COUNT];
@@ -110,6 +118,8 @@ typedef struct UI_Node_Data {
     usize frame_number;
 
     String key;
+
+    UI_Node *node;
 
     // Last frame event info also lands here, used by builders to report events to the caller.
     UI_Event event;
@@ -200,12 +210,14 @@ void ui_init(void) {
     node->string = id;
     node->hash = hash_string(id);
     node->flags = UI_LAYOUT_V;
-    
+
     node->size[UI_Axis2_X].kind = UI_Size_Null;
     node->size[UI_Axis2_Y].kind = UI_Size_Null;
     
     node->first_child = NULL;
+    node->last_child = NULL;
     node->next = NULL;
+    node->prev = NULL;
     node->child_count = 0;
     node->parent = NULL;
     
@@ -232,15 +244,19 @@ UI_Node *ui_make_node(UI_Flags flags, String id) {
 
     ssize idx = hmgeti(ui_state.node_data, node->hash);
     if (idx < 0) // New node
-        hmput(ui_state.node_data, node->hash, ((UI_Node_Data){.key=id, .frame_number=ui_state.frame_number}));
-    else
+        hmput(ui_state.node_data, node->hash, ((UI_Node_Data){.key=id, .frame_number=ui_state.frame_number, .node=node}));
+    else {
         ui_state.node_data[idx].value.frame_number = ui_state.frame_number;
+        ui_state.node_data[idx].value.node = node;
+    }
     
     node->size[UI_Axis2_X].kind = UI_Size_Null;
     node->size[UI_Axis2_Y].kind = UI_Size_Null;
     
     node->first_child = NULL;
+    node->last_child = NULL;
     node->next = NULL;
+    node->prev = NULL;
     node->child_count = 0;
     
     node->pad[UI_Axis2_X] = ui_state.pad[UI_Axis2_X];
@@ -248,12 +264,14 @@ UI_Node *ui_make_node(UI_Flags flags, String id) {
     
     node->parent = ui_state.parent;
     
-    UI_Node *pchild = ui_state.parent->first_child;
+    UI_Node *pchild = ui_state.parent->last_child;
     if (pchild) {
-        while (pchild->next) pchild = pchild->next;
         pchild->next = node;
+        node->prev = pchild;
+        ui_state.parent->last_child = node;
     } else {
         ui_state.parent->first_child = node;
+        ui_state.parent->last_child = node;
     }
 
     ui_state.parent->child_count += 1;
@@ -265,9 +283,19 @@ void ui_build_begin(void) {
     arena_reset(ui_state.build_arena);
 
     ui_state.root_node->first_child = NULL;
+    ui_state.root_node->last_child = NULL;
     ui_state.root_node->parent = NULL;
     ui_state.root_node->next = NULL;
+    ui_state.root_node->prev = NULL;
     ui_state.root_node->child_count = 0;
+
+    ssize idx = hmgeti(ui_state.node_data, ui_state.root_node->hash);
+    if (idx < 0) // New node
+        hmput(ui_state.node_data, ui_state.root_node->hash, ((UI_Node_Data){.key=ui_state.root_node->string, .frame_number=ui_state.frame_number, .node=ui_state.root_node}));
+    else {
+        ui_state.node_data[idx].value.frame_number = ui_state.frame_number;
+        ui_state.node_data[idx].value.node = ui_state.root_node;
+    }
 
     ui_state.frame_number += 1;
 }
@@ -304,11 +332,24 @@ void ui_collect_events(void) {
     Vector2 mouse_delta = GetMouseDelta();
     int mouse_moved = mouse_delta.x || mouse_delta.y;
 
+    int key = 0;
+
+    UI_Mod mod = 0;
+
+    if (IsKeyDown(KEY_LEFT_SHIFT)) mod |= UI_MOD_L_SHIFT;
+    if (IsKeyDown(KEY_RIGHT_SHIFT)) mod |= UI_MOD_R_SHIFT;
+
     if (mouse_moved) arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_MOUSE_MOVE, .pos=m_pos}));
     if (IsMouseButtonPressed(0))  arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_MOUSE_LEFT, .pos=m_pos}));
     if (IsMouseButtonPressed(1))  arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_MOUSE_RIGHT, .pos=m_pos}));
     if (IsMouseButtonReleased(0)) arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_RELEASE, .key=UI_MOUSE_LEFT, .pos=m_pos}));
     if (IsMouseButtonReleased(1)) arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_RELEASE, .key=UI_MOUSE_RIGHT, .pos=m_pos}));
+
+    if ((key=GetCharPressed())) {
+        arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key=key, .mod=mod}));
+    } else if (IsKeyPressed(KEY_TAB)) {
+        arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\t', .mod=mod}));
+    }
 }
 
 void ui_dispatch_events(void) {
@@ -339,6 +380,33 @@ void ui_dispatch_events(void) {
             case UI_EVENT_RELEASE:
                 data = hmgetp(ui_state.node_data, ui_state.focused);
                 data->value.event = ev;
+                break;
+            case UI_EVENT_NAV:
+                data = hmgetp(ui_state.node_data, ui_state.focused);
+                current = data->value.node;
+                if (ev.key == '\t' && !(ev.mod & (UI_MOD_L_SHIFT | UI_MOD_R_SHIFT))) {
+                    if (current->first_child) ui_state.focused = current->first_child->hash;
+                    else if (current->next) ui_state.focused = current->next->hash;
+                    else {
+                        do {
+                            if (!current->parent) break;
+                            current = current->parent;
+                        } while (!current->next);
+                        if (current->next) ui_state.focused = current->next->hash;
+                    }
+                }
+                if (ev.key == '\t' && (ev.mod & (UI_MOD_L_SHIFT | UI_MOD_R_SHIFT))) {
+                    if (current->last_child) ui_state.focused = current->last_child->hash;
+                    else if (current->prev) ui_state.focused = current->prev->hash;
+                    else {
+                        do {
+                            if (!current->parent) break;
+                            current = current->parent;
+                        } while (!current->prev);
+                        if (current->prev) ui_state.focused = current->prev->hash;
+                    }
+
+                }
                 break;
         }
     }
