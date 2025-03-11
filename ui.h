@@ -9,10 +9,10 @@ Frame sequence:
 - ui_make_node
   - [x] Construction & Event dispatch based on the last frame
 - ui_end_build
+  - [x] Prune/Remove unused cache slots
   - [x] Layout
   - [x] Handle events for this frame
   - [x] Draw
-  - [x] Prune/Remove unused cache slots
 
 */
 
@@ -108,7 +108,7 @@ struct UI_Node {
 
 typedef struct UI_Node_Data {
     usize frame_number;
-    
+
     String key;
 
     // Last frame event info also lands here, used by builders to report events to the caller.
@@ -133,6 +133,9 @@ typedef struct UI_State {
     UI_Node *parent;
 
     UI_Node_Data_KV *node_data;
+
+    UI_Event *event_buffer;
+    usize focused;
 } UI_State;
 
 extern UI_State ui_state;
@@ -152,6 +155,7 @@ void ui_build_begin(void);
 void ui_build_end(void);
 
 void ui_prune(void);
+void ui_collect_events(void);
 void ui_dispatch_events(void);
 
 void ui_push_parent(UI_Node *parent);
@@ -208,11 +212,14 @@ void ui_init(void) {
     ui_state.root_node = ui_state.parent = node;
     ui_state.pad[UI_Axis2_X] = 10;
     ui_state.pad[UI_Axis2_Y] = 10;
+
+    ui_state.focused = node->hash;
 }
 
 void ui_deinit(void) {
     arena_free(ui_state.build_arena);
     arena_free(ui_state.arena);
+    arrfree(ui_state.event_buffer);
 }
 
 UI_Node *ui_make_node(UI_Flags flags, String id) {
@@ -268,6 +275,7 @@ void ui_build_begin(void) {
 void ui_build_end(void) {
     ui_prune();
     ui_layout(ui_state.root_node);
+    ui_collect_events();
     ui_dispatch_events();
     ui_draw(ui_state.root_node);
 }
@@ -289,36 +297,53 @@ static int point_in_rect(Vec2 p, Rect r) {
     return (p.x > r.xy[0]) && (p.x < r.xy[0]+r.wh[0]) && (p.y > r.xy[1]) && (p.y < r.xy[1]+r.wh[1]);
 }
 
+void ui_collect_events(void) {
+    Vector2 mouse_pos = GetMousePosition();
+    Vec2 m_pos = (Vec2){mouse_pos.x, mouse_pos.y};
+
+    Vector2 mouse_delta = GetMouseDelta();
+    int mouse_moved = mouse_delta.x || mouse_delta.y;
+
+    if (mouse_moved) arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_MOUSE_MOVE, .pos=m_pos}));
+    if (IsMouseButtonPressed(0))  arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_MOUSE_LEFT, .pos=m_pos}));
+    if (IsMouseButtonPressed(1))  arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_MOUSE_RIGHT, .pos=m_pos}));
+    if (IsMouseButtonReleased(0)) arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_RELEASE, .key=UI_MOUSE_LEFT, .pos=m_pos}));
+    if (IsMouseButtonReleased(1)) arrpush(ui_state.event_buffer, ((UI_Event){.kind=UI_EVENT_RELEASE, .key=UI_MOUSE_RIGHT, .pos=m_pos}));
+}
+
 void ui_dispatch_events(void) {
-    int m_left_pre = IsMouseButtonPressed(0);
-    int m_left_rel = IsMouseButtonReleased(0);
-    int m_right_pre = IsMouseButtonPressed(1);
-    int m_right_rel = IsMouseButtonReleased(1);
-
-    if (m_left_pre || m_left_rel || m_right_pre || m_right_rel) {
+    for (usize i = 0; i < arrlen(ui_state.event_buffer); ++i) {
         UI_Node *current = ui_state.root_node;
-        Vector2 mouse_pos = GetMousePosition();
-        Vec2 m_pos = (Vec2){mouse_pos.x, mouse_pos.y};
+        UI_Event ev = ui_state.event_buffer[i];
+        UI_Node_Data_KV *data = NULL;
 
-        do {
-            if (point_in_rect(m_pos, current->dim)) {
-                if (current->child_count) {
-                    current = current->first_child;
-                    continue;
-                } else {
-                    UI_Node_Data_KV *data = hmgetp(ui_state.node_data, current->hash);
-                    data->value.event = (UI_Event){
-                        .kind=m_left_pre || m_right_pre ? UI_EVENT_PRESS : UI_EVENT_RELEASE, 
-                        .key=m_left_pre || m_left_rel ? UI_MOUSE_LEFT : UI_MOUSE_RIGHT, 
-                        .pos=m_pos,
-                    };
-                    current = current->parent->next;
-                }
-            } else {
-                current = current->next;
-            }
-        } while (current);
+        switch (ev.kind) {
+            case UI_EVENT_MOUSE_MOVE:
+                 do {
+                    if (point_in_rect(ev.pos, current->dim)) {
+                        if (current->first_child) {
+                            current = current->first_child;
+                            continue;
+                        } else {
+                            ui_state.focused = current->hash;
+                            break;
+                        }
+                    } else {
+                        if (!current->next && current->parent)
+                            ui_state.focused = current->parent->hash;
+                        current = current->next;
+                    }
+                } while (current); 
+                break;
+            case UI_EVENT_PRESS:
+            case UI_EVENT_RELEASE:
+                data = hmgetp(ui_state.node_data, ui_state.focused);
+                data->value.event = ev;
+                break;
+        }
     }
+
+    arrsetlen(ui_state.event_buffer, 0);
 }
 
 void ui_push_parent(UI_Node *parent) {
@@ -462,17 +487,21 @@ void ui_draw(UI_Node *node) {
         PURPLE,
         VIOLET,
     };
+
+    int i = 0;
+
+    if (node->hash == ui_state.focused) i = 1;
     
     if (node->flags & UI_DRAW_BACKGROUND)
-        DrawRectangleRec(r, colors[node->hash%ArrayLen(colors)]);
+        DrawRectangleRec(r, colors[(node->hash+i)%ArrayLen(colors)]);
     if (node->flags & UI_DRAW_BORDER)
-        DrawRectangleLinesEx(r, 5, colors[(node->hash+1)%ArrayLen(colors)]);
+        DrawRectangleLinesEx(r, 5, colors[(node->hash+i+1)%ArrayLen(colors)]);
     if (node->flags & UI_DRAW_TEXT)
         DrawText((const char *)node->string.str,
                  node->dim.xy[0]+node->pad[0],
                  node->dim.xy[1]+node->pad[1],
                  FONT_SIZE,
-                 BLACK);
+                 i ? WHITE : BLACK);
     
     ui_draw(node->first_child);
     ui_draw(node->next);

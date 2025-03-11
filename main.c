@@ -152,6 +152,8 @@ int main() {
 
         ui_build_end();
 
+        DrawFPS(700, 0);
+
         arena_reset(temp_arena);
         EndDrawing();
     }
