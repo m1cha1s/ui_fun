@@ -69,6 +69,11 @@ void *arena_alloc(Arena *arena, size_t size);
 void arena_reset(Arena *arena);
 void arena_free(Arena *arena);
 
+#include <stdarg.h>
+#include <string.h>
+
+char *aprintf(Arena *a, char *fmt, ...);
+
 #if !defined(ARENA_MALLOC) || !defined(ARENA_FREE)
 #include <stdlib.h>
 #endif
@@ -150,6 +155,26 @@ void arena_free(Arena *arena)
 	if (!arena->first) return;
     free_arena_block(arena->first);
     ARENA_FREE(arena);
+}
+
+char *aprintf(Arena *a, char *fmt, ...) {
+    va_list args;
+    ssize buf_size;
+    char *buf;
+
+    va_start(args, fmt);
+    buf_size = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+
+    buf = arena_alloc(a, buf_size+1);
+
+    va_start(args, fmt);
+    vsnprintf(buf, buf_size+1, fmt, args);
+    va_end(args);
+
+    buf[buf_size] = 0;
+
+    return buf;
 }
 
 #endif

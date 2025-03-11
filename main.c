@@ -102,7 +102,7 @@ int main() {
         ui_pop_parent();
 
         char *text = ui_text_input(S("Text text"));
-        if (text) printf("%s\n", text);
+        // if (text) printf("%s\n", text);
         
         if (gello) {
             panel = ui_panel(S("50%"));

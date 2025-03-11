@@ -60,6 +60,14 @@ typedef struct UI_Size {
 typedef enum UI_Key {
     UI_MOUSE_LEFT = 256, // After ASCII
     UI_MOUSE_RIGHT,
+    
+    UI_LEFT,
+    UI_RIGHT,
+    UI_UP,
+    UI_DOWN,
+    
+    UI_BACKSPACE,
+    UI_DELETE,
 } UI_Key;
 
 typedef u32 UI_Mod;
@@ -96,6 +104,7 @@ enum {
     UI_LAYOUT_H        = (1ull<<5),
     UI_TEXT_ED         = (1ull<<6),
     UI_DRAW_ED_TEXT    = (1ull<<7),
+    UI_DRAW_CURSOR     = (1ull<<8),
 };
 
 typedef struct UI_Node UI_Node;
@@ -123,6 +132,7 @@ typedef struct UI_Node_Data {
     String key;
     UI_Node *node;
 
+    ssize cursor, mark;
     u8 *ed_string;
 
     // Last frame event info also lands here, used by builders to report events to the caller.
@@ -139,6 +149,7 @@ typedef struct UI_State {
 
     usize frame_number;
 
+    Arena *temp_arena;
     Arena *build_arena;
 
     f32 pad[UI_Axis2_COUNT];
@@ -206,7 +217,8 @@ UI_State *ui_init(void) {
     memory_set(sp, 0, sizeof(UI_State));
     
     sp->arena = arena_new();
-    
+
+    sp->temp_arena = arena_new();    
     sp->build_arena = arena_new();
     
     UI_Node *node = arena_alloc(sp->arena, sizeof(UI_Node));
@@ -316,6 +328,8 @@ void ui_build_end(void) {
     ui_collect_events();
     ui_dispatch_events();
     ui_draw(ui_state->root_node);
+    
+    arena_reset(ui_state->temp_arena);
 }
 
 void ui_prune(void) {
@@ -346,8 +360,12 @@ void ui_collect_events(void) {
 
     UI_Mod mod = 0;
 
+    // --- MOD ---
+
     if (IsKeyDown(KEY_LEFT_SHIFT)) mod |= UI_MOD_L_SHIFT;
     if (IsKeyDown(KEY_RIGHT_SHIFT)) mod |= UI_MOD_R_SHIFT;
+
+    // --- MOUSE ---
 
     if (mouse_moved) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_MOUSE_MOVE, .pos=m_pos}));
     if (IsMouseButtonPressed(0))  arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_MOUSE_LEFT, .pos=m_pos}));
@@ -355,15 +373,22 @@ void ui_collect_events(void) {
     if (IsMouseButtonReleased(0)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_RELEASE, .key=UI_MOUSE_LEFT, .pos=m_pos}));
     if (IsMouseButtonReleased(1)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_RELEASE, .key=UI_MOUSE_RIGHT, .pos=m_pos}));
 
+    // --- TEXT ---
+
     if ((key=GetCharPressed())) {
         arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_TEXT, .key=key, .mod=mod}));
     } 
-    if (IsKeyPressed(KEY_TAB)) {
-        arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\t', .mod=mod}));
-    } 
-    if (IsKeyPressed(KEY_ENTER)) {
-        arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\n', .mod=mod}));
-    }
+    if (IsKeyPressed(KEY_BACKSPACE)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_TEXT, .key=UI_BACKSPACE, .mod=mod}));
+    if (IsKeyPressed(KEY_DELETE)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_TEXT, .key=UI_DELETE, .mod=mod}));
+    
+    // --- NAV ---
+    
+    if (IsKeyPressed(KEY_TAB)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\t', .mod=mod}));
+    if (IsKeyPressed(KEY_ENTER)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\n', .mod=mod}));
+    if (IsKeyPressed(KEY_LEFT)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key=UI_LEFT, .mod=mod}));
+    if (IsKeyPressed(KEY_RIGHT)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key=UI_RIGHT, .mod=mod}));
+    if (IsKeyPressed(KEY_UP)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key=UI_UP, .mod=mod}));
+    if (IsKeyPressed(KEY_DOWN)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key=UI_DOWN, .mod=mod}));
 }
 
 void ui_dispatch_events(void) {
@@ -412,8 +437,7 @@ void ui_dispatch_events(void) {
                         } while (!current->next);
                         if (current->next) ui_state->focused = current->next->hash;
                     }
-                }
-                if (ev.key == '\t' && (ev.mod & (UI_MOD_L_SHIFT | UI_MOD_R_SHIFT))) {
+                } else if (ev.key == '\t' && (ev.mod & (UI_MOD_L_SHIFT | UI_MOD_R_SHIFT))) {
                     if (current->last_child) ui_state->focused = current->last_child->hash;
                     else if (current->prev) ui_state->focused = current->prev->hash;
                     else {
@@ -424,8 +448,10 @@ void ui_dispatch_events(void) {
                         if (current->prev) ui_state->focused = current->prev->hash;
                     }
 
-                }
-                if (ev.key == '\n') {
+                } else if (ev.key == '\n') {
+                    data = hmgetp(ui_state->node_data, ui_state->focused);
+                    data->value.event = ev;
+                } else {
                     data = hmgetp(ui_state->node_data, ui_state->focused);
                     data->value.event = ev;
                 }
@@ -482,7 +508,7 @@ int ui_button(String label) {
 }
 
 char *ui_text_input(String label) {
-    UI_Node *text_input = ui_make_node(UI_DRAW_ED_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER | UI_TEXT_ED, label);
+    UI_Node *text_input = ui_make_node(UI_DRAW_ED_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER | UI_TEXT_ED | UI_DRAW_CURSOR, label);
 
     text_input->size[UI_Axis2_X].kind = UI_Size_Ed_Text_Content;
     text_input->size[UI_Axis2_Y].kind = UI_Size_Ed_Text_Content;
@@ -494,10 +520,47 @@ char *ui_text_input(String label) {
 
     UI_Event ev = kv->value.event;
 
-    // if (ev.kind == UI_EVENT_PRESS && ev.key == UI_MOUSE_LEFT) ui_state->mode = UI_STATE_MODE_TEXT_ED;
-    if (ev.kind == UI_EVENT_TEXT) {
-        if (!kv->value.ed_string) arrpush(kv->value.ed_string, 0);
-        arrins(kv->value.ed_string, arrlen(kv->value.ed_string)-2, ev.key);
+    // TODO: Move event handling into ui_make_node?? maybe
+    switch (ev.kind) {
+        case UI_EVENT_TEXT:
+            if (!kv->value.ed_string) arrpush(kv->value.ed_string, 0);
+            switch (ev.key) {
+                case UI_BACKSPACE:
+                    if ((kv->value.cursor-1) < 0) break;
+                    --kv->value.cursor;
+                    arrdel(kv->value.ed_string, kv->value.cursor);
+                    break;
+                case UI_DELETE:
+                    if ((kv->value.cursor+1) > arrlen(kv->value.ed_string)-1) break;
+                    arrdel(kv->value.ed_string, kv->value.cursor);
+                    break;
+                default:
+                    arrins(kv->value.ed_string, kv->value.cursor, ev.key);
+                    ++kv->value.cursor;
+                    break;
+            }
+            kv->value.mark = kv->value.cursor;
+            break;
+        case UI_EVENT_NAV:
+            switch (ev.key) {
+                case UI_LEFT:
+                    if ((kv->value.cursor-1) < 0) break;
+                    --kv->value.cursor;
+                    kv->value.mark = kv->value.cursor;
+                    break;
+                case UI_RIGHT:
+                    if (kv->value.cursor+1 > arrlen(kv->value.ed_string)-1) break;
+                    ++kv->value.cursor;
+                    kv->value.mark = kv->value.cursor;
+                    break;
+                case UI_UP: // TODO: Make these do something
+                    break;
+                case UI_DOWN:
+                    break;
+            break;
+        }
+        default:
+            break;
     }
     return kv->value.ed_string;
 }
@@ -635,6 +698,15 @@ void ui_draw(UI_Node *node) {
                  node->dim.xy[1]+node->pad[1],
                  FONT_SIZE,
                  i ? WHITE : BLACK);
+        if (node->flags & UI_DRAW_CURSOR && node->hash == ui_state->focused) {
+            char *txt = aprintf(ui_state->temp_arena, "%.*s", kv->value.cursor, kv->value.ed_string);
+            int txt_size = MeasureText(txt, FONT_SIZE);
+            DrawRectangle(node->dim.xy[0]+node->pad[0]+txt_size,
+                          node->dim.xy[1]+node->pad[1],
+                          2,
+                          FONT_SIZE,
+                          WHITE);
+        }
     }
 
     ui_draw(node->first_child);
