@@ -82,8 +82,6 @@ typedef enum UI_Event_Kind {
     UI_EVENT_RELEASE,
     UI_EVENT_MOUSE_MOVE,
     UI_EVENT_SCROLL,
-    UI_EVENT_TEXT,
-    UI_EVENT_NAV,
 } UI_Event_Kind;
 
 typedef struct UI_Event {
@@ -102,7 +100,7 @@ enum {
     UI_CLICKABLE       = (1ull<<3),
     UI_LAYOUT_V        = (1ull<<4),
     UI_LAYOUT_H        = (1ull<<5),
-    UI_TEXT_ED         = (1ull<<6),
+    UI_TEXT_NO_ED         = (1ull<<6),
     UI_DRAW_ED_TEXT    = (1ull<<7),
     UI_DRAW_CURSOR     = (1ull<<8),
 };
@@ -144,6 +142,11 @@ typedef struct UI_Node_Data_KV {
     UI_Node_Data value;
 } UI_Node_Data_KV;
 
+typedef enum UI_Mode {
+    UI_MODE_NORMAL, // Standard navigation and mouse clicking.
+    UI_MODE_EDIT, // Mainly text editing a text field.
+} UI_Mode;
+
 typedef struct UI_State {
     Arena *arena;
 
@@ -157,9 +160,13 @@ typedef struct UI_State {
     UI_Node *root_node;
     UI_Node *parent;
 
+    UI_Mode mode;
+
     UI_Node_Data_KV *node_data;
 
     UI_Event *event_buffer;
+
+    usize hovering;
     usize focused;
 } UI_State;
 
@@ -189,10 +196,10 @@ void ui_pop_parent(void);
 void ui_set_pad_x(f32 val);
 void ui_set_pad_y(f32 val);
 
-UI_Node *ui_panel(UI_Flags flags, String id);
-UI_Node *ui_label(UI_Flags flags, String label);
-int ui_button(UI_Flags flags, String label);
-char *ui_text_input(UI_Flags flags, String label);
+UI_Node *ui_panel(String id, UI_Flags flags);
+UI_Node *ui_label(String label, UI_Flags flags);
+int ui_button(String label, UI_Flags flags);
+char *ui_text_input(String label, UI_Flags flags);
 
 void ui_layout(UI_Node *node);
 
@@ -220,6 +227,8 @@ UI_State *ui_init(void) {
 
     sp->temp_arena = arena_new();    
     sp->build_arena = arena_new();
+
+    sp->mode = UI_MODE_NORMAL;
     
     UI_Node *node = arena_alloc(sp->arena, sizeof(UI_Node));
     memory_set(node, 0, sizeof(*node));
@@ -245,6 +254,7 @@ UI_State *ui_init(void) {
     sp->pad[UI_Axis2_Y] = 10;
 
     sp->focused = node->hash;
+    sp->hovering = node->hash;
 
     return sp;
 }
@@ -356,11 +366,17 @@ void ui_collect_events(void) {
     Vector2 mouse_delta = GetMouseDelta();
     int mouse_moved = mouse_delta.x || mouse_delta.y;
 
+    Vector2 mouse_scroll = GetMouseWheelMoveV();
+    Vec2 m_scroll = (Vec2){mouse_scroll.x, mouse_scroll.y};
+    int scrolled = mouse_scroll.x || mouse_scroll.y;
+
     int key = 0;
 
     UI_Mod mod = 0;
 
     // --- MOD ---
+
+    // TODO: Add alt, ctr, super, (option/cmd)?
 
     if (IsKeyDown(KEY_LEFT_SHIFT)) mod |= UI_MOD_L_SHIFT;
     if (IsKeyDown(KEY_RIGHT_SHIFT)) mod |= UI_MOD_R_SHIFT;
@@ -368,6 +384,9 @@ void ui_collect_events(void) {
     // --- MOUSE ---
 
     if (mouse_moved) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_MOUSE_MOVE, .pos=m_pos}));
+
+    if (scrolled) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_SCROLL, .pos=m_pos, .delta=m_scroll}));
+
     if (IsMouseButtonPressed(0))  arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_MOUSE_LEFT, .pos=m_pos}));
     if (IsMouseButtonPressed(1))  arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_MOUSE_RIGHT, .pos=m_pos}));
     if (IsMouseButtonReleased(0)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_RELEASE, .key=UI_MOUSE_LEFT, .pos=m_pos}));
@@ -375,20 +394,15 @@ void ui_collect_events(void) {
 
     // --- TEXT ---
 
-    if ((key=GetCharPressed())) {
-        arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_TEXT, .key=key, .mod=mod}));
-    } 
-    if (IsKeyPressed(KEY_BACKSPACE)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_TEXT, .key=UI_BACKSPACE, .mod=mod}));
-    if (IsKeyPressed(KEY_DELETE)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_TEXT, .key=UI_DELETE, .mod=mod}));
-    
-    // --- NAV ---
-    
-    if (IsKeyPressed(KEY_TAB)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\t', .mod=mod}));
-    if (IsKeyPressed(KEY_ENTER)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key='\n', .mod=mod}));
-    if (IsKeyPressed(KEY_LEFT)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key=UI_LEFT, .mod=mod}));
-    if (IsKeyPressed(KEY_RIGHT)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key=UI_RIGHT, .mod=mod}));
-    if (IsKeyPressed(KEY_UP)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key=UI_UP, .mod=mod}));
-    if (IsKeyPressed(KEY_DOWN)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_NAV, .key=UI_DOWN, .mod=mod}));
+    if ((key=GetCharPressed()))      arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=key, .mod=mod}));
+    if (IsKeyPressed(KEY_BACKSPACE)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_BACKSPACE, .mod=mod}));
+    if (IsKeyPressed(KEY_DELETE))    arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_DELETE, .mod=mod}));
+    if (IsKeyPressed(KEY_TAB))       arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key='\t', .mod=mod}));
+    if (IsKeyPressed(KEY_ENTER))     arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key='\n', .mod=mod}));
+    if (IsKeyPressed(KEY_LEFT))      arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_LEFT, .mod=mod}));
+    if (IsKeyPressed(KEY_RIGHT))     arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_RIGHT, .mod=mod}));
+    if (IsKeyPressed(KEY_UP))        arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_UP, .mod=mod}));
+    if (IsKeyPressed(KEY_DOWN))      arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_DOWN, .mod=mod}));
 }
 
 void ui_dispatch_events(void) {
@@ -398,62 +412,73 @@ void ui_dispatch_events(void) {
         UI_Node_Data_KV *data = NULL;
 
         switch (ev.kind) {
+            case UI_EVENT_SCROLL:
+                data = hmgetp(ui_state->node_data, ui_state->hovering);
+                data->value.event = ev;
+                break;
             case UI_EVENT_MOUSE_MOVE:
-                 do {
+                do {
                     if (point_in_rect(ev.pos, current->dim)) {
                         if (current->first_child) {
                             current = current->first_child;
                             continue;
                         } else {
-                            ui_state->focused = current->hash;
+                            ui_state->hovering = current->hash;
                             break;
                         }
                     } else {
                         if (!current->next && current->parent)
-                            ui_state->focused = current->parent->hash;
+                            ui_state->hovering = current->parent->hash;
                         current = current->next;
                     }
-                } while (current); 
+                } while (current);
+
+                data = hmgetp(ui_state->node_data, (ui_state->mode == UI_MODE_EDIT) ? ui_state->focused : ui_state->hovering);
+                data->value.event = ev;
                 break;
             case UI_EVENT_PRESS:
+                if (ev.key == UI_MOUSE_LEFT || ev.key == UI_MOUSE_RIGHT) {
+                    ui_state->focused = ui_state->hovering;
+                    ui_state->mode = UI_MODE_NORMAL;
+                }
             case UI_EVENT_RELEASE:
-                data = hmgetp(ui_state->node_data, ui_state->focused);
-                data->value.event = ev;
-                break;
-            case UI_EVENT_TEXT:
-                data = hmgetp(ui_state->node_data, ui_state->focused);
-                data->value.event = ev;
-                break;
-            case UI_EVENT_NAV:
-                data = hmgetp(ui_state->node_data, ui_state->focused);
-                current = data->value.node;
-                if (ev.key == '\t' && !(ev.mod & (UI_MOD_L_SHIFT | UI_MOD_R_SHIFT))) {
-                    if (current->first_child) ui_state->focused = current->first_child->hash;
-                    else if (current->next) ui_state->focused = current->next->hash;
-                    else {
-                        do {
-                            if (!current->parent) break;
-                            current = current->parent;
-                        } while (!current->next);
-                        if (current->next) ui_state->focused = current->next->hash;
-                    }
-                } else if (ev.key == '\t' && (ev.mod & (UI_MOD_L_SHIFT | UI_MOD_R_SHIFT))) {
-                    if (current->last_child) ui_state->focused = current->last_child->hash;
-                    else if (current->prev) ui_state->focused = current->prev->hash;
-                    else {
-                        do {
-                            if (!current->parent) break;
-                            current = current->parent;
-                        } while (!current->prev);
-                        if (current->prev) ui_state->focused = current->prev->hash;
-                    }
+                switch (ui_state->mode) {
+                    case UI_MODE_NORMAL:
+                        data = hmgetp(ui_state->node_data, ui_state->focused);
+                        current = data->value.node;
+                        if (ev.key == '\t' && !(ev.mod & (UI_MOD_L_SHIFT | UI_MOD_R_SHIFT))) {
+                            if (current->first_child) ui_state->focused = current->first_child->hash;
+                            else if (current->next) ui_state->focused = current->next->hash;
+                            else {
+                                do {
+                                    if (!current->parent) break;
+                                    current = current->parent;
+                                } while (!current->next);
+                                if (current->next) ui_state->focused = current->next->hash;
+                            }
+                        } else if (ev.key == '\t' && (ev.mod & (UI_MOD_L_SHIFT | UI_MOD_R_SHIFT))) {
+                            if (current->last_child) ui_state->focused = current->last_child->hash;
+                            else if (current->prev) ui_state->focused = current->prev->hash;
+                            else {
+                                do {
+                                    if (!current->parent) break;
+                                    current = current->parent;
+                                } while (!current->prev);
+                                if (current->prev) ui_state->focused = current->prev->hash;
+                            }
 
-                } else if (ev.key == '\n') {
-                    data = hmgetp(ui_state->node_data, ui_state->focused);
-                    data->value.event = ev;
-                } else {
-                    data = hmgetp(ui_state->node_data, ui_state->focused);
-                    data->value.event = ev;
+                        } else if (ev.key == '\n') {
+                            data = hmgetp(ui_state->node_data, ui_state->focused);
+                            data->value.event = ev;
+                        } else {
+                            data = hmgetp(ui_state->node_data, ui_state->focused);
+                            data->value.event = ev;
+                        }
+                        break;
+                    case UI_MODE_EDIT:
+                        data = hmgetp(ui_state->node_data, ui_state->focused);
+                        data->value.event = ev;
+                        break;
                 }
                 break;
         }
@@ -478,14 +503,14 @@ void ui_set_pad_y(f32 val) {
     ui_state->pad[UI_Axis2_Y] = val;
 }
 
-UI_Node *ui_panel(UI_Flags flags, String id) {
+UI_Node *ui_panel(String id, UI_Flags flags) {
     UI_Node *panel_node = ui_make_node(UI_DRAW_BACKGROUND | UI_LAYOUT_H | flags, id);
     panel_node->size[UI_Axis2_X].kind = UI_Size_Children_Sum;
     panel_node->size[UI_Axis2_Y].kind = UI_Size_Children_Sum;
     return panel_node;
 }
 
-UI_Node *ui_label(UI_Flags flags, String label) {
+UI_Node *ui_label(String label, UI_Flags flags) {
     UI_Node *label_node = ui_make_node(UI_DRAW_TEXT | flags, label);
     label_node->size[UI_Axis2_X].kind = UI_Size_Text_Content;
     label_node->size[UI_Axis2_Y].kind = UI_Size_Text_Content;
@@ -493,7 +518,7 @@ UI_Node *ui_label(UI_Flags flags, String label) {
     return label_node;
 }
 
-int ui_button(UI_Flags flags, String label) {
+int ui_button(String label, UI_Flags flags) {
     UI_Node *button_node = ui_make_node(UI_DRAW_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER | flags, label);
     
     button_node->size[UI_Axis2_X].kind = UI_Size_Text_Content;
@@ -504,11 +529,12 @@ int ui_button(UI_Flags flags, String label) {
 
     UI_Event ev = ui_state->node_data[idx].value.event;
     
-    return (ev.kind == UI_EVENT_PRESS && ev.key == UI_MOUSE_LEFT) || (ev.kind == UI_EVENT_NAV && ev.key == '\n');
+    return (ev.kind == UI_EVENT_PRESS && ev.key == UI_MOUSE_LEFT) ||
+           (ev.kind == UI_EVENT_PRESS && ev.key == '\n' && ui_state->mode == UI_MODE_NORMAL);
 }
 
-char *ui_text_input(UI_Flags flags, String label) {
-    UI_Node *text_input = ui_make_node(UI_DRAW_ED_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER | UI_TEXT_ED | UI_DRAW_CURSOR | flags, label);
+char *ui_text_input(String label, UI_Flags flags) {
+    UI_Node *text_input = ui_make_node(UI_DRAW_ED_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER | UI_DRAW_CURSOR | flags, label);
 
     text_input->size[UI_Axis2_X].kind = UI_Size_Ed_Text_Content;
     text_input->size[UI_Axis2_Y].kind = UI_Size_Ed_Text_Content;
@@ -521,46 +547,48 @@ char *ui_text_input(UI_Flags flags, String label) {
     UI_Event ev = kv->value.event;
 
     // TODO: Move event handling into ui_make_node?? maybe
-    switch (ev.kind) {
-        case UI_EVENT_TEXT:
-            if (!kv->value.ed_string) arrpush(kv->value.ed_string, 0);
-            switch (ev.key) {
-                case UI_BACKSPACE:
-                    if ((kv->value.cursor-1) < 0) break;
-                    --kv->value.cursor;
-                    arrdel(kv->value.ed_string, kv->value.cursor);
-                    break;
-                case UI_DELETE:
-                    if ((kv->value.cursor+1) > arrlen(kv->value.ed_string)-1) break;
-                    arrdel(kv->value.ed_string, kv->value.cursor);
-                    break;
-                default:
-                    arrins(kv->value.ed_string, kv->value.cursor, ev.key);
-                    ++kv->value.cursor;
-                    break;
-            }
-            kv->value.mark = kv->value.cursor;
-            break;
-        case UI_EVENT_NAV:
-            switch (ev.key) {
-                case UI_LEFT:
-                    if ((kv->value.cursor-1) < 0) break;
-                    --kv->value.cursor;
-                    kv->value.mark = kv->value.cursor;
-                    break;
-                case UI_RIGHT:
-                    if (kv->value.cursor+1 > arrlen(kv->value.ed_string)-1) break;
-                    ++kv->value.cursor;
-                    kv->value.mark = kv->value.cursor;
-                    break;
-                case UI_UP: // TODO: Make these do something
-                    break;
-                case UI_DOWN:
-                    break;
-            break;
+    if (!(flags & UI_TEXT_NO_ED)) {
+        switch (ev.kind) {
+            case UI_EVENT_PRESS:
+                if (!kv->value.ed_string) arrpush(kv->value.ed_string, 0);
+                switch (ev.key) {
+                    case UI_BACKSPACE:
+                        if ((kv->value.cursor-1) < 0) break;
+                        --kv->value.cursor;
+                        arrdel(kv->value.ed_string, kv->value.cursor);
+                        break;
+                    case UI_DELETE:
+                        if ((kv->value.cursor+1) > arrlen(kv->value.ed_string)-1) break;
+                        arrdel(kv->value.ed_string, kv->value.cursor);
+                        break;
+                    case UI_MOUSE_LEFT:
+                    case UI_MOUSE_RIGHT:
+                        ui_state->mode = UI_MODE_EDIT;
+                        break;
+                    case UI_LEFT:
+                        if ((kv->value.cursor-1) < 0) break;
+                        --kv->value.cursor;
+                        kv->value.mark = kv->value.cursor;
+                        break;
+                    case UI_RIGHT:
+                        if (kv->value.cursor+1 > arrlen(kv->value.ed_string)-1) break;
+                        ++kv->value.cursor;
+                        kv->value.mark = kv->value.cursor;
+                        break;
+                    case UI_UP: // TODO: Make these do something
+                        break;
+                    case UI_DOWN:
+                        break;
+                    default:
+                        arrins(kv->value.ed_string, kv->value.cursor, ev.key);
+                        ++kv->value.cursor;
+                        break;
+                }
+                kv->value.mark = kv->value.cursor;
+                break;
+            default:
+                break;
         }
-        default:
-            break;
     }
     return kv->value.ed_string;
 }
@@ -680,7 +708,8 @@ void ui_draw(UI_Node *node) {
     UI_Node_Data_KV *kv = hmgetp(ui_state->node_data, node->hash);
     int i = 0;
 
-    if (node->hash == ui_state->focused) i = 1;
+    if (node->hash == ui_state->hovering) ++i;
+    if (node->hash == ui_state->focused) ++i;
     
     if (node->flags & UI_DRAW_BACKGROUND)
         DrawRectangleRec(r, colors[(node->hash+i)%ArrayLen(colors)]);

@@ -63,7 +63,7 @@ int main() {
     int list_size = 0;
     
     while (!WindowShouldClose()) {
-        if (IsKeyPressed(KEY_G)) gello = !gello;
+        // if (IsKeyPressed(KEY_G)) gello = !gello;
 
 
         BeginDrawing();
@@ -75,74 +75,74 @@ int main() {
         ui_state->root_node->dim.wh[0] = GetRenderWidth();
         ui_state->root_node->dim.wh[1] = GetRenderHeight();
         
-        UI_Node *panel = ui_panel(0, S("test panel"));
+        UI_Node *panel = ui_panel(S("test panel"), 0);
         ui_push_parent(panel);
         {
-            UI_Node *hello_label = ui_label(0, S("Hello"));
-            UI_Node *bye_label = ui_label(0, S("Byeo"));
+            UI_Node *hello_label = ui_label(S("Hello"), 0);
+            UI_Node *bye_label = ui_label(S("Byeo"), 0);
         }
         ui_pop_parent();
         
-        panel = ui_panel(0, S("buttons"));
+        panel = ui_panel(S("buttons"), 0);
         ui_push_parent(panel);
 
-        if (ui_button(0, S("G"))) {
+        if (ui_button(S("G"), 0)) {
             printf("Pressed the button\n");
             gello = !gello;
         }
-        if (ui_button(0, S("G on"))) {
+        if (ui_button(S("G on"), 0)) {
             printf("Pressed the button 1\n");
             gello = 1;
         }
-        if (ui_button(0, S("G off"))) {
+        if (ui_button(S("G off"), 0)) {
             printf("Pressed the button 2\n");
             gello = 0;
         }
 
         ui_pop_parent();
 
-        char *text = ui_text_input(0, S("Text text"));
+        char *text = ui_text_input(S("Text text"), 0);
         // if (text) printf("%s\n", text);
         
         if (gello) {
-            panel = ui_panel(0, S("50%"));
+            panel = ui_panel(S("50%"), 0);
             panel->size[UI_Axis2_X].kind = UI_Size_Parent_Percent;
             panel->size[UI_Axis2_X].value = 0.3;
             ui_push_parent(panel);
             {
-                UI_Node *a = ui_label(0, S("Gello"));
+                UI_Node *a = ui_label(S("Gello"), 0);
             }
             ui_pop_parent();
         }
 
-        panel = ui_panel(0, S("list"));
+        panel = ui_panel(S("list"), 0);
         panel->flags &= ~UI_LAYOUT_H;
         panel->flags |= UI_LAYOUT_V;
         ui_push_parent(panel);
         {
-            panel = ui_panel(0, S("list ctrl"));
+            panel = ui_panel(S("list ctrl"), 0);
             ui_push_parent(panel);
             {
-                if (ui_button(0, S("list +"))) {
+                if (ui_button(S("list +"), 0)) {
                     ++list_size;
                 }
-                if (ui_button(0, S("list -")) && list_size > 0) {
+                if (ui_button(S("list -"), 0) && list_size > 0) {
                     --list_size;
                 }
                 char *list_size_str = tprintf("list size: %d", list_size);
-                ui_label(0, (String){.str=list_size_str, .len=strlen(list_size_str)});
+                ui_label((String){.str=list_size_str, .len=strlen(list_size_str)}, 0);
             }
             ui_pop_parent();
 
             if (list_size) {
-                panel = ui_panel(0, S("list list"));
+                panel = ui_panel(S("list list"), 0);
                 panel->flags &= ~UI_LAYOUT_H;
                 panel->flags |= UI_LAYOUT_V;
                 ui_push_parent(panel);
                 {
                     for (int i = 0; i < list_size; ++i) {
                         char *l_name = tprintf("list item %d", i+1);
-                        ui_label(0, (String){.str=l_name, .len=strlen(l_name)});
+                        ui_label((String){.str=l_name, .len=strlen(l_name)}, 0);
                     }        
                 }
                 ui_pop_parent();
@@ -151,7 +151,7 @@ int main() {
         ui_pop_parent();
 
         char *msg = tprintf("root node child count: %d", ui_state->root_node->child_count);
-        ui_label(0, (String){msg, strlen(msg)});
+        ui_label((String){msg, strlen(msg)}, 0);
 
         ui_build_end();
 
