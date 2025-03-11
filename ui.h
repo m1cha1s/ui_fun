@@ -181,7 +181,7 @@ void ui_set_pad_y(f32 val);
 UI_Node *ui_panel(String id);
 UI_Node *ui_label(String label);
 int ui_button(String label);
-String ui_text_input(String label);
+char *ui_text_input(String label);
 
 void ui_layout(UI_Node *node);
 
@@ -481,7 +481,7 @@ int ui_button(String label) {
     return (ev.kind == UI_EVENT_PRESS && ev.key == UI_MOUSE_LEFT) || (ev.kind == UI_EVENT_NAV && ev.key == '\n');
 }
 
-String ui_text_input(String label) {
+char *ui_text_input(String label) {
     UI_Node *text_input = ui_make_node(UI_DRAW_ED_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER | UI_TEXT_ED, label);
 
     text_input->size[UI_Axis2_X].kind = UI_Size_Ed_Text_Content;
@@ -496,9 +496,10 @@ String ui_text_input(String label) {
 
     // if (ev.kind == UI_EVENT_PRESS && ev.key == UI_MOUSE_LEFT) ui_state->mode = UI_STATE_MODE_TEXT_ED;
     if (ev.kind == UI_EVENT_TEXT) {
-        arrpush(kv->value.ed_string, ev.key);
+        if (!kv->value.ed_string) arrpush(kv->value.ed_string, 0);
+        arrins(kv->value.ed_string, arrlen(kv->value.ed_string)-2, ev.key);
     }
-    return (String){.str=kv->value.ed_string, .len=arrlen(kv->value.ed_string)};
+    return kv->value.ed_string;
 }
 
 // FIXME: change from iterating over the children to building self with parent as ref, maybe.
