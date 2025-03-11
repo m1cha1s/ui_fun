@@ -46,16 +46,16 @@ int main() {
                    | FLAG_WINDOW_ALWAYS_RUN);
     InitWindow(800, 600, "UI Fun");
     
-    ui_init();
+    ui_state = ui_init();
     
-    ui_state.root_node->dim.xy[0] = 0;
-    ui_state.root_node->dim.xy[1] = 0;
+    ui_state->root_node->dim.xy[0] = 0;
+    ui_state->root_node->dim.xy[1] = 0;
     
-    ui_state.root_node->dim.wh[0] = GetRenderWidth();
-    ui_state.root_node->dim.wh[1] = GetRenderHeight();
+    ui_state->root_node->dim.wh[0] = GetRenderWidth();
+    ui_state->root_node->dim.wh[1] = GetRenderHeight();
     
     
-    // ui_layout(ui_state.root_node);
+    // ui_layout(ui_state->root_node);
     
     // return 0;
     
@@ -72,8 +72,8 @@ int main() {
         
         ui_build_begin();
         
-        ui_state.root_node->dim.wh[0] = GetRenderWidth();
-        ui_state.root_node->dim.wh[1] = GetRenderHeight();
+        ui_state->root_node->dim.wh[0] = GetRenderWidth();
+        ui_state->root_node->dim.wh[1] = GetRenderHeight();
         
         UI_Node *panel = ui_panel(S("test panel"));
         ui_push_parent(panel);
@@ -100,6 +100,9 @@ int main() {
         }
 
         ui_pop_parent();
+
+        String text = ui_text_input(S("Text text"));
+        printf("%d %.*s\n", text.len, text.len, text.str);
         
         if (gello) {
             panel = ui_panel(S("50%"));
@@ -147,7 +150,7 @@ int main() {
         }
         ui_pop_parent();
 
-        char *msg = tprintf("root node child count: %d", ui_state.root_node->child_count);
+        char *msg = tprintf("root node child count: %d", ui_state->root_node->child_count);
         ui_label((String){msg, strlen(msg)});
 
         ui_build_end();
@@ -158,7 +161,7 @@ int main() {
         EndDrawing();
     }
     
-    ui_deinit();
+    ui_deinit(ui_state);
     CloseWindow();
     arena_free(temp_arena);
 }
