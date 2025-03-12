@@ -3,6 +3,13 @@
 
 /*
 
+TODO:
+- [ ] Sensible color scheme
+- [ ] More actions in the text editor
+- [ ] Some example programs
+  - [ ] Text editor
+  - [ ] Music player
+
 Frame sequence:
 - ui_begin_build
   - [x] Reset
@@ -100,7 +107,7 @@ enum {
     UI_CLICKABLE       = (1ull<<3),
     UI_LAYOUT_V        = (1ull<<4),
     UI_LAYOUT_H        = (1ull<<5),
-    UI_TEXT_NO_ED         = (1ull<<6),
+    UI_TEXT_NO_ED      = (1ull<<6),
     UI_DRAW_ED_TEXT    = (1ull<<7),
     UI_DRAW_CURSOR     = (1ull<<8),
 };
