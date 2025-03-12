@@ -175,6 +175,11 @@ typedef struct UI_State {
 
     usize hovering;
     usize focused;
+
+    // Color schemes
+    Color text_color[3];
+    Color background_color[3];
+    Color border_color[3];
 } UI_State;
 
 extern UI_State *ui_state;
@@ -199,9 +204,6 @@ void ui_dispatch_events(void);
 
 void ui_push_parent(UI_Node *parent);
 void ui_pop_parent(void);
-
-void ui_set_pad_x(f32 val);
-void ui_set_pad_y(f32 val);
 
 UI_Node *ui_panel(String id, UI_Flags flags);
 UI_Node *ui_label(String label, UI_Flags flags);
@@ -262,6 +264,18 @@ UI_State *ui_init(void) {
 
     sp->focused = node->hash;
     sp->hovering = node->hash;
+
+    sp->background_color[0] = (Color){120, 120, 120, 255};
+    sp->background_color[1] = (Color){120, 120, 120, 255};
+    sp->background_color[2] = (Color){120, 120, 120, 255};
+
+    sp->border_color[0] = (Color){10, 10, 10, 255};
+    sp->border_color[1] = (Color){10, 10, 10, 255};
+    sp->border_color[2] = (Color){10, 10, 10, 255};
+
+    sp->text_color[0] = (Color){255, 255, 255, 255};
+    sp->text_color[1] = (Color){255, 255, 255, 255};
+    sp->text_color[2] = (Color){255, 255, 255, 255};
 
     return sp;
 }
@@ -502,14 +516,6 @@ void ui_pop_parent(void) {
     ui_state->parent = ui_state->parent->parent;
 }
 
-void ui_set_pad_x(f32 val) {
-    ui_state->pad[UI_Axis2_X] = val;
-}
-
-void ui_set_pad_y(f32 val) {
-    ui_state->pad[UI_Axis2_Y] = val;
-}
-
 UI_Node *ui_panel(String id, UI_Flags flags) {
     UI_Node *panel_node = ui_make_node(UI_DRAW_BACKGROUND | UI_LAYOUT_H | flags, id);
     panel_node->size[UI_Axis2_X].kind = UI_Size_Children_Sum;
@@ -689,6 +695,8 @@ void ui_layout(UI_Node *node)
 }
 
 void ui_draw(UI_Node *node) {
+    int i = 0;
+
     if (!node) return;
     Rectangle r = {
         .x = node->dim.xy[UI_Axis2_X],
@@ -696,44 +704,28 @@ void ui_draw(UI_Node *node) {
         .width = node->dim.wh[UI_Axis2_X],
         .height = node->dim.wh[UI_Axis2_Y],
     };
-    const Color colors[] = {
-        YELLOW,
-        GOLD,
-        ORANGE,
-        PINK,
-        RED,
-        MAROON,
-        GREEN,
-        LIME,
-        SKYBLUE,
-        BLUE,
-        PURPLE,
-        VIOLET,
-    };
-
 
     UI_Node_Data_KV *kv = hmgetp(ui_state->node_data, node->hash);
-    int i = 0;
 
     if (node->hash == ui_state->hovering) ++i;
     if (node->hash == ui_state->focused) ++i;
     
     if (node->flags & UI_DRAW_BACKGROUND)
-        DrawRectangleRec(r, colors[(node->hash+i)%ArrayLen(colors)]);
+        DrawRectangleRec(r, ui_state->background_color[i]);
     if (node->flags & UI_DRAW_BORDER)
-        DrawRectangleLinesEx(r, 5, colors[(node->hash+i+1)%ArrayLen(colors)]);
+        DrawRectangleLinesEx(r, 5, ui_state->border_color[i]);
     if (node->flags & UI_DRAW_TEXT)
         DrawText((const char *)node->string.str,
                  node->dim.xy[0]+node->pad[0],
                  node->dim.xy[1]+node->pad[1],
                  FONT_SIZE,
-                 i ? WHITE : BLACK);
+                 ui_state->text_color[i]);
     if (node->flags & UI_DRAW_ED_TEXT && kv->value.ed_string) {
         DrawText((const char *)kv->value.ed_string,
                  node->dim.xy[0]+node->pad[0],
                  node->dim.xy[1]+node->pad[1],
                  FONT_SIZE,
-                 i ? WHITE : BLACK);
+                 ui_state->text_color[i]);
         if (node->flags & UI_DRAW_CURSOR && node->hash == ui_state->focused) {
             char *txt = aprintf(ui_state->temp_arena, "%.*s", kv->value.cursor, kv->value.ed_string);
             int txt_size = MeasureText(txt, FONT_SIZE);
@@ -741,7 +733,7 @@ void ui_draw(UI_Node *node) {
                           node->dim.xy[1]+node->pad[1],
                           2,
                           FONT_SIZE,
-                          WHITE);
+                          ui_state->text_color[i]);
         }
     }
 
