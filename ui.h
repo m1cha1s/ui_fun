@@ -732,7 +732,7 @@ void ui_draw(UI_Node *node) {
     if (!node) return;
 
     UI_Node *parent = node->parent;
-
+    
     Rectangle r = {
         .x = node->dim.xy[UI_Axis2_X],
         .y = node->dim.xy[UI_Axis2_Y],
@@ -743,10 +743,20 @@ void ui_draw(UI_Node *node) {
     UI_Node_Data_KV *kv = hmgetp(ui_state->node_data, node->hash);
 
     if (parent) {
-        BeginScissorMode(parent->dim.xy[UI_Axis2_X],
-                         parent->dim.xy[UI_Axis2_Y],
-                         parent->dim.wh[UI_Axis2_X],
-                         parent->dim.wh[UI_Axis2_Y]);
+        Rectangle pr = {
+            parent->dim.xy[UI_Axis2_X],
+            parent->dim.xy[UI_Axis2_Y],
+            parent->dim.wh[UI_Axis2_X],
+            parent->dim.wh[UI_Axis2_Y]
+        };
+        if (!CheckCollisionRecs(r, pr)) {
+            if (parent->flags & UI_LAYOUT_H)
+                if (r.x > pr.x) return;
+            if (parent->flags & UI_LAYOUT_V)
+                if (r.y > pr.y) return;
+            goto next;
+        }
+        BeginScissorMode(pr.x, pr.y, pr.width, pr.height);
     }
 
     if (node->hash == ui_state->hovering) ++i;
@@ -786,6 +796,7 @@ void ui_draw(UI_Node *node) {
     }
 
     ui_draw(node->first_child);
+next:
     ui_draw(node->next);
 }
 
