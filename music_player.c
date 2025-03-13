@@ -36,7 +36,8 @@ char *tprintf(char *fmt, ...) {
 }
 
 int main() {
-    SetWindowState(FLAG_WINDOW_RESIZABLE);
+    SetWindowState(FLAG_WINDOW_RESIZABLE
+                   | FLAG_WINDOW_HIGHDPI);
     InitWindow(800, 600, "music player");
     InitAudioDevice();
     per_song_arena = arena_new();
