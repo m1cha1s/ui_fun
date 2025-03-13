@@ -35,6 +35,13 @@ char *tprintf(char *fmt, ...) {
     return buf;
 }
 
+int sortstring( const void *str1, const void *str2 )
+{
+    char *const *pp1 = str1;
+    char *const *pp2 = str2;
+    return strcmp(*pp1, *pp2);
+}
+
 int main() {
     SetWindowState(FLAG_WINDOW_RESIZABLE
                    | FLAG_WINDOW_HIGHDPI
@@ -89,15 +96,17 @@ int main() {
                 if (DirectoryExists(path)) {
                     if (fp.capacity) UnloadDirectoryFiles(fp);
                     fp = LoadDirectoryFilesEx(path, ext, recursive);
+                    qsort(fp.paths, fp.count, sizeof(*fp.paths), sortstring);
                 }
             }
 
-            ui_label(S("recursive search"), 0);
+            /* ui_label(S("recursive search"), 0);
             String rs = recursive ? S("X") : S("O");
             if (ui_button(rs, 0)) {
                 recursive = !recursive;
-            }
+            } */
 
+            ui_label(S("Volume"), 0);
             if (ui_button(S("-"), 0)) { if (vol > 0) vol -= 0.1; SetMasterVolume(vol); }
             u8 *vol_txt = tprintf("%d%%", (int)(100*vol));
             String vol_str = {vol_txt, strlen(vol_txt)};
@@ -114,7 +123,8 @@ int main() {
         ui_push_parent(p);
         {
             for (int i = 0; i < fp.count; ++i) {
-                String bs = {.str=fp.paths[i], .len=strlen(fp.paths[i])};
+                char *f_name = GetFileName(fp.paths[i]);
+                String bs = {.str=f_name, .len=strlen(f_name)};
                 if (ui_button(bs, 0)) {
                     printf("%s\n", fp.paths[i]);
 
