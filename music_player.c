@@ -37,7 +37,8 @@ char *tprintf(char *fmt, ...) {
 
 int main() {
     SetWindowState(FLAG_WINDOW_RESIZABLE
-                   | FLAG_WINDOW_HIGHDPI);
+                   | FLAG_WINDOW_HIGHDPI
+                   | FLAG_WINDOW_ALWAYS_RUN);
     InitWindow(800, 600, "music player");
     InitAudioDevice();
     per_song_arena = arena_new();
@@ -50,8 +51,8 @@ int main() {
     ui_state->root_node->dim.xy[0] = 0;
     ui_state->root_node->dim.xy[1] = 0;
 
-    ui_state->root_node->dim.wh[0] = GetRenderWidth();
-    ui_state->root_node->dim.wh[1] = GetRenderHeight();
+    ui_state->root_node->dim.wh[0] = GetScreenWidth();
+    ui_state->root_node->dim.wh[1] = GetScreenHeight();
 
     UI_Node *p = NULL;
     int playing = 0;
@@ -67,8 +68,8 @@ int main() {
 
         ui_build_begin();
 
-        ui_state->root_node->dim.wh[0] = GetRenderWidth();
-        ui_state->root_node->dim.wh[1] = GetRenderHeight();
+        ui_state->root_node->dim.wh[0] = GetScreenWidth();
+        ui_state->root_node->dim.wh[1] = GetScreenHeight();
 
         p = ui_h_panel(S("file path"), UI_DRAW_BORDER);
         p->size[0].kind = UI_Size_Parent_Percent;
