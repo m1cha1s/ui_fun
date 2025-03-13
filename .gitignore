@@ -1,4 +1,5 @@
 main
+music_player
 *.o
 *.dSYM
 .DS_Store

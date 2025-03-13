@@ -4,11 +4,11 @@
 /*
 
 TODO:
-- [ ] Sensible color scheme
+- [x] Sensible color scheme
 - [ ] More actions in the text editor
 - [ ] Some example programs
   - [ ] Text editor
-  - [ ] Music player
+  - [x] Music player
 
 Frame sequence:
 - ui_begin_build
@@ -67,12 +67,12 @@ typedef struct UI_Size {
 typedef enum UI_Key {
     UI_MOUSE_LEFT = 256, // After ASCII
     UI_MOUSE_RIGHT,
-    
+
     UI_LEFT,
     UI_RIGHT,
     UI_UP,
     UI_DOWN,
-    
+
     UI_BACKSPACE,
     UI_DELETE,
 } UI_Key;
@@ -110,6 +110,7 @@ enum {
     UI_TEXT_NO_ED      = (1ull<<6),
     UI_DRAW_ED_TEXT    = (1ull<<7),
     UI_DRAW_CURSOR     = (1ull<<8),
+    UI_SCROLLABLE      = (1ull<<9),
 };
 
 typedef struct UI_Node UI_Node;
@@ -119,7 +120,7 @@ struct UI_Node {
     UI_Node *first_child, *last_child;
     UI_Node *next, *prev;
     usize child_count;
-    
+
     f32 pad[UI_Axis2_COUNT];
     UI_Flags flags;
     UI_Size size[UI_Axis2_COUNT];
@@ -140,6 +141,7 @@ typedef struct UI_Node_Data {
     ssize cursor, mark;
     u8 *ed_string;
 
+    float scroll;
     // Last frame event info also lands here, used by builders to report events to the caller.
     UI_Event event;
 } UI_Node_Data;
@@ -163,7 +165,7 @@ typedef struct UI_State {
     Arena *build_arena;
 
     f32 pad[UI_Axis2_COUNT];
-    
+
     UI_Node *root_node;
     UI_Node *parent;
 
@@ -180,6 +182,8 @@ typedef struct UI_State {
     Color text_color[3];
     Color background_color[3];
     Color border_color[3];
+
+    Font font;
 } UI_State;
 
 extern UI_State *ui_state;
@@ -206,6 +210,10 @@ void ui_push_parent(UI_Node *parent);
 void ui_pop_parent(void);
 
 UI_Node *ui_panel(String id, UI_Flags flags);
+
+UI_Node *ui_h_panel(String id, UI_Flags flags);
+UI_Node *ui_v_panel(String id, UI_Flags flags);
+
 UI_Node *ui_label(String label, UI_Flags flags);
 int ui_button(String label, UI_Flags flags);
 char *ui_text_input(String label, UI_Flags flags);
@@ -231,33 +239,33 @@ UI_State *ui_init(void) {
     UI_State *sp = malloc(sizeof(UI_State));
 
     memory_set(sp, 0, sizeof(UI_State));
-    
+
     sp->arena = arena_new();
 
-    sp->temp_arena = arena_new();    
+    sp->temp_arena = arena_new();
     sp->build_arena = arena_new();
 
     sp->mode = UI_MODE_NORMAL;
-    
+
     UI_Node *node = arena_alloc(sp->arena, sizeof(UI_Node));
     memory_set(node, 0, sizeof(*node));
-    
+
     String id = S("_root");
-    
+
     node->string = id;
     node->hash = hash_string(id);
     node->flags = UI_LAYOUT_V;
 
     node->size[UI_Axis2_X].kind = UI_Size_Null;
     node->size[UI_Axis2_Y].kind = UI_Size_Null;
-    
+
     node->first_child = NULL;
     node->last_child = NULL;
     node->next = NULL;
     node->prev = NULL;
     node->child_count = 0;
     node->parent = NULL;
-    
+
     sp->root_node = sp->parent = node;
     sp->pad[UI_Axis2_X] = 10;
     sp->pad[UI_Axis2_Y] = 10;
@@ -290,7 +298,7 @@ void ui_deinit(UI_State *sp) {
 UI_Node *ui_make_node(UI_Flags flags, String id) {
     UI_Node *node = arena_alloc(ui_state->build_arena, sizeof(UI_Node));
     memory_set(node, 0, sizeof(*node));
-    
+
     node->string = id;
     node->hash = hash_string(id);
     node->flags = flags;
@@ -302,21 +310,21 @@ UI_Node *ui_make_node(UI_Flags flags, String id) {
         ui_state->node_data[idx].value.frame_number = ui_state->frame_number;
         ui_state->node_data[idx].value.node = node;
     }
-    
+
     node->size[UI_Axis2_X].kind = UI_Size_Null;
     node->size[UI_Axis2_Y].kind = UI_Size_Null;
-    
+
     node->first_child = NULL;
     node->last_child = NULL;
     node->next = NULL;
     node->prev = NULL;
     node->child_count = 0;
-    
+
     node->pad[UI_Axis2_X] = ui_state->pad[UI_Axis2_X];
     node->pad[UI_Axis2_Y] = ui_state->pad[UI_Axis2_Y];
-    
+
     node->parent = ui_state->parent;
-    
+
     UI_Node *pchild = ui_state->parent->last_child;
     if (pchild) {
         pchild->next = node;
@@ -359,13 +367,13 @@ void ui_build_end(void) {
     ui_collect_events();
     ui_dispatch_events();
     ui_draw(ui_state->root_node);
-    
+
     arena_reset(ui_state->temp_arena);
 }
 
 void ui_prune(void) {
     for (usize i = 0; i < hmlen(ui_state->node_data); ++i) {
-        if (ui_state->node_data[i].value.frame_number != ui_state->frame_number && 
+        if (ui_state->node_data[i].value.frame_number != ui_state->frame_number &&
             ui_state->node_data[i].key != ui_state->root_node->hash) {
             UI_Node_Data_KV node_data_kv = ui_state->node_data[i];
             printf("prune idx: %llu key: %.*s(%llu)\n", i, node_data_kv.value.key.len, node_data_kv.value.key.str, node_data_kv.key);
@@ -523,25 +531,47 @@ UI_Node *ui_panel(String id, UI_Flags flags) {
     return panel_node;
 }
 
+UI_Node *ui_h_panel(String id, UI_Flags flags) {
+    UI_Node *p = ui_panel(id, flags);
+    p->flags &= ~UI_LAYOUT_V;
+    p->flags |= UI_LAYOUT_H;
+    return p;
+}
+
+UI_Node *ui_v_panel(String id, UI_Flags flags) {
+    UI_Node *p = ui_panel(id, flags);
+    p->flags &= ~UI_LAYOUT_H;
+    p->flags |= UI_LAYOUT_V;
+
+    if (flags & UI_SCROLLABLE) {
+        UI_Node_Data_KV *kv = hmgetp(ui_state->node_data, p->hash);
+        UI_Event ev = kv->value.event;
+        if (ev.kind == UI_EVENT_SCROLL) {
+            kv->value.scroll -= ev.delta.y * 50;
+        }
+    }
+    return p;
+}
+
 UI_Node *ui_label(String label, UI_Flags flags) {
     UI_Node *label_node = ui_make_node(UI_DRAW_TEXT | flags, label);
     label_node->size[UI_Axis2_X].kind = UI_Size_Text_Content;
     label_node->size[UI_Axis2_Y].kind = UI_Size_Text_Content;
-    
+
     return label_node;
 }
 
 int ui_button(String label, UI_Flags flags) {
     UI_Node *button_node = ui_make_node(UI_DRAW_TEXT | UI_DRAW_BACKGROUND | UI_DRAW_BORDER | flags, label);
-    
+
     button_node->size[UI_Axis2_X].kind = UI_Size_Text_Content;
     button_node->size[UI_Axis2_Y].kind = UI_Size_Text_Content;
-    
+
     ssize idx = hmgeti(ui_state->node_data, button_node->hash); // idx should never be -1
     assert(idx >= 0);
 
     UI_Event ev = ui_state->node_data[idx].value.event;
-    
+
     return (ev.kind == UI_EVENT_PRESS && ev.key == UI_MOUSE_LEFT) ||
            (ev.kind == UI_EVENT_PRESS && ev.key == '\n' && ui_state->mode == UI_MODE_NORMAL);
 }
@@ -611,29 +641,31 @@ void ui_layout(UI_Node *node)
 {
     Vector2 text_size;
     UI_Node *child;
-    UI_Node_Data_KV *kv;
+    UI_Node_Data_KV *kv, *pkv;
     if (!node) return;
-    
+
     node->pos_start[UI_Axis2_X] = 0;
     node->pos_start[UI_Axis2_Y] = 0;
-    
+
     UI_Node *parent = node->parent;
 
     kv = hmgetp(ui_state->node_data, node->hash);
-    
+
     if (!parent) {
         ui_layout(node->first_child);
         goto exit; // This should only be true for the root node.
     }
-    
+
+    pkv = hmgetp(ui_state->node_data, parent->hash);
+
     node->pos_start[UI_Axis2_X] = parent->pos_start[UI_Axis2_X]+node->pad[UI_Axis2_X];
-    node->pos_start[UI_Axis2_Y] = parent->pos_start[UI_Axis2_Y]+node->pad[UI_Axis2_Y];
-    
+    node->pos_start[UI_Axis2_Y] = parent->pos_start[UI_Axis2_Y]+node->pad[UI_Axis2_Y]-pkv->value.scroll;
+
     node->dim.xy[UI_Axis2_X] = parent->pos_start[UI_Axis2_X];
-    node->dim.xy[UI_Axis2_Y] = parent->pos_start[UI_Axis2_Y];
-    
+    node->dim.xy[UI_Axis2_Y] = parent->pos_start[UI_Axis2_Y]-pkv->value.scroll;
+
     ui_layout(node->first_child);
-    
+
     for (int ax = UI_Axis2_X; ax < UI_Axis2_COUNT; ++ax)
     {
         switch (node->size[ax].kind)
@@ -647,7 +679,7 @@ void ui_layout(UI_Node *node)
             break;
             case UI_Size_Children_Sum:
                 node->dim.wh[ax] = node->pos_start[ax]-node->dim.xy[ax] + node->pad[ax];
-                
+
                 // ui_layout(node->first_child);
                 if (node->dim.wh[ax] == 2*node->pad[ax]) {
                     child = node->first_child;
@@ -659,7 +691,7 @@ void ui_layout(UI_Node *node)
                 break;
             case UI_Size_Text_Content:
                 text_size = MeasureTextEx(
-                                          GetFontDefault(),
+                                          ui_state->font,
                                           (const char*)node->string.str,
                                           FONT_SIZE,
                                           FONT_SIZE/10
@@ -669,7 +701,7 @@ void ui_layout(UI_Node *node)
                 break;
             case UI_Size_Ed_Text_Content: {
                 text_size = kv->value.ed_string ? MeasureTextEx(
-                                          GetFontDefault(),
+                                          ui_state->font,
                                           (const char*)kv->value.ed_string,
                                           FONT_SIZE,
                                           FONT_SIZE/10
@@ -682,14 +714,14 @@ void ui_layout(UI_Node *node)
                 break;
         }
     }
-    
+
     if (parent->flags & UI_LAYOUT_H) {
         parent->pos_start[UI_Axis2_X] += node->dim.wh[UI_Axis2_X];
     }
     if (parent->flags & UI_LAYOUT_V) {
         parent->pos_start[UI_Axis2_Y] += node->dim.wh[UI_Axis2_Y];
     }
-    
+
     exit:
     ui_layout(node->next);
 }
@@ -698,6 +730,9 @@ void ui_draw(UI_Node *node) {
     int i = 0;
 
     if (!node) return;
+
+    UI_Node *parent = node->parent;
+
     Rectangle r = {
         .x = node->dim.xy[UI_Axis2_X],
         .y = node->dim.xy[UI_Axis2_Y],
@@ -707,34 +742,47 @@ void ui_draw(UI_Node *node) {
 
     UI_Node_Data_KV *kv = hmgetp(ui_state->node_data, node->hash);
 
+    if (parent) {
+        BeginScissorMode(parent->dim.xy[UI_Axis2_X],
+                         parent->dim.xy[UI_Axis2_Y],
+                         parent->dim.wh[UI_Axis2_X],
+                         parent->dim.wh[UI_Axis2_Y]);
+    }
+
     if (node->hash == ui_state->hovering) ++i;
     if (node->hash == ui_state->focused) ++i;
-    
+
     if (node->flags & UI_DRAW_BACKGROUND)
         DrawRectangleRec(r, ui_state->background_color[i]);
     if (node->flags & UI_DRAW_BORDER)
         DrawRectangleLinesEx(r, 5, ui_state->border_color[i]);
     if (node->flags & UI_DRAW_TEXT)
-        DrawText((const char *)node->string.str,
-                 node->dim.xy[0]+node->pad[0],
-                 node->dim.xy[1]+node->pad[1],
+        DrawTextEx(ui_state->font, (const char *)node->string.str,
+                 (Vector2){node->dim.xy[0]+node->pad[0],
+                 node->dim.xy[1]+node->pad[1]},
                  FONT_SIZE,
+                 FONT_SIZE/10,
                  ui_state->text_color[i]);
     if (node->flags & UI_DRAW_ED_TEXT && kv->value.ed_string) {
-        DrawText((const char *)kv->value.ed_string,
-                 node->dim.xy[0]+node->pad[0],
-                 node->dim.xy[1]+node->pad[1],
+        DrawTextEx(ui_state->font, (const char *)kv->value.ed_string,
+                 (Vector2){node->dim.xy[0]+node->pad[0],
+                 node->dim.xy[1]+node->pad[1]},
                  FONT_SIZE,
+                 FONT_SIZE/10,
                  ui_state->text_color[i]);
         if (node->flags & UI_DRAW_CURSOR && node->hash == ui_state->focused) {
             char *txt = aprintf(ui_state->temp_arena, "%.*s", kv->value.cursor, kv->value.ed_string);
-            int txt_size = MeasureText(txt, FONT_SIZE);
+            int txt_size = MeasureTextEx(ui_state->font, txt, FONT_SIZE, FONT_SIZE/10).x;
             DrawRectangle(node->dim.xy[0]+node->pad[0]+txt_size,
                           node->dim.xy[1]+node->pad[1],
                           2,
                           FONT_SIZE,
                           ui_state->text_color[i]);
         }
+    }
+
+    if (parent) {
+        EndScissorMode();
     }
 
     ui_draw(node->first_child);
