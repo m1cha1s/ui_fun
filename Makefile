@@ -1,6 +1,6 @@
 CC := cc
-CFLAGS := $(shell pkg-config --cflags raylib) -g -fsanitize=address
-LDFLAGS := $(shell pkg-config --libs raylib) -g -fsanitize=address
+CFLAGS := $(shell pkg-config --cflags raylib) # -g -fsanitize=address
+LDFLAGS := $(shell pkg-config --libs raylib) # -g -fsanitize=address
 
 .PHONY: all clean run
 

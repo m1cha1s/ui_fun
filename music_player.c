@@ -78,8 +78,9 @@ int main() {
         p->size[1].value = 0.1;
         ui_push_parent(p);
         {
-            ui_label(S("music extension:"), 0);
-            u8 *ext = ui_text_input(S("file ext"), 0);
+            // ui_label(S("music extension:"), 0);
+            // u8 *ext = ui_text_input(S("file ext"), 0);
+            u8 *ext = NULL;
             if (!ext) ext = ".mp3";
 
             ui_label(S("music folder:"), 0);
