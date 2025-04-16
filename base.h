@@ -125,7 +125,7 @@ void *arena_alloc(Arena *arena, size_t size)
     
     do {
         if (!arena->current->next) {
-            printf("arena_alloc: no next");
+            printf("arena_alloc: no next\n");
             arena->current->next = new_arena_block(size > BASE_ARENA_MIN_CAP ? size : BASE_ARENA_MIN_CAP);
         }
         arena->current = arena->current->next;
