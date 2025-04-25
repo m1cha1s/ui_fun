@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// ==== TYPES ==== 
+
 typedef int8_t   s8;
 typedef int16_t s16;
 typedef int32_t s32;
@@ -25,6 +27,11 @@ typedef u16 b16;
 typedef u32 b32;
 typedef u64 b64;
 
+typedef struct Vec2
+{
+    f32 x, y;
+} Vec2;
+
 #ifndef NULL
 #define NULL ((void*)0)
 #endif
@@ -40,17 +47,6 @@ typedef struct String {
 #define ArrayLen(arr) (sizeof((arr))/sizeof(*(arr)))
 
 void memory_set(void *ptr, u8 val, usize size);
-
-#ifdef BASE_IMPLEMENTATION
-
-void memory_set(void *ptr, u8 val, usize size) {
-    u8 *p = (u8*)ptr;
-    for (usize s = 0; s < size; ++s) p[s] = val;
-}
-
-#endif
-
-#ifdef BASE_ARENA
 
 typedef struct Arena_Block {
     struct Arena_Block *next;
@@ -89,8 +85,15 @@ char *aprintf(Arena *a, char *fmt, ...);
 #define BASE_ARENA_MIN_CAP 4096
 #endif
 
+#endif // _TYPES_H
+
 #ifdef BASE_IMPLEMENTATION
 #undef BASE_IMPLEMENTATION
+
+void memory_set(void *ptr, u8 val, usize size) {
+    u8 *p = (u8*)ptr;
+    for (usize s = 0; s < size; ++s) p[s] = val;
+}
 
 Arena *arena_new(void) {
     Arena *arena = ARENA_MALLOC(sizeof(Arena));
@@ -161,25 +164,20 @@ char *aprintf(Arena *a, char *fmt, ...) {
     va_list args;
     ssize buf_size;
     char *buf;
-
+    
     va_start(args, fmt);
     buf_size = vsnprintf(NULL, 0, fmt, args);
     va_end(args);
-
+    
     buf = arena_alloc(a, buf_size+1);
-
+    
     va_start(args, fmt);
     vsnprintf(buf, buf_size+1, fmt, args);
     va_end(args);
-
+    
     buf[buf_size] = 0;
-
+    
     return buf;
 }
 
-#endif
-
-
-#endif
-
-#endif
+#endif // BASE_IMPLEMENTATION

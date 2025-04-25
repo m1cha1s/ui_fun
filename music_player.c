@@ -53,7 +53,8 @@ int main() {
     ui_state = ui_init();
 
     Font f = LoadFont("LiberationMono-Regular.ttf");
-    ui_state->font = f;
+    UI_Font font = { (void*)&f };
+    arrpush(ui_state->fonts, font);
 
     ui_state->root_node->dim.xy[0] = 0;
     ui_state->root_node->dim.xy[1] = 0;

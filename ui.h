@@ -35,10 +35,7 @@ Frame sequence:
 
 // #define font_size 20
 
-typedef struct Vec2 
-{
-    f32 x, y;
-} Vec2;
+Vec2 ui_measure_text(String text, usize font_idx);
 
 typedef enum UI_Axis2 
 {
@@ -117,10 +114,10 @@ enum
     UI_DRAW_BORDER     = (1ull<<2),
     UI_DRAW_ED_TEXT    = (1ull<<3),
     UI_DRAW_CURSOR     = (1ull<<4),
-
+    
     UI_LAYOUT_V        = (1ull<<5),
     UI_LAYOUT_H        = (1ull<<6),
-
+    
     UI_CLICKABLE       = (1ull<<7),
     UI_TEXT_NO_ED      = (1ull<<8),
     UI_SCROLLABLE      = (1ull<<9),
@@ -137,7 +134,7 @@ struct UI_Node {
     f32 pad[UI_Axis2_COUNT];
     UI_Flags flags;
     UI_Size size[UI_Axis2_COUNT];
-
+    
     f32 font_size;
     
     usize hash;
@@ -171,6 +168,10 @@ typedef enum UI_Mode {
     UI_MODE_EDIT, // Mainly text editing a text field.
 } UI_Mode;
 
+typedef struct UI_Font {
+    void *font_data;
+} UI_Font;
+
 typedef struct UI_State {
     Arena *arena;
     
@@ -198,7 +199,7 @@ typedef struct UI_State {
     Color background_color[3];
     Color border_color[3];
     
-    Font font;
+    UI_Font *fonts;
 } UI_State;
 
 extern UI_State *ui_state;
@@ -284,7 +285,7 @@ UI_State *ui_init(void) {
     sp->root_node = sp->parent = node;
     sp->pad[UI_Axis2_X] = 10;
     sp->pad[UI_Axis2_Y] = 10;
-
+    
     sp->focused = node->hash;
     sp->hovering = node->hash;
     
@@ -438,7 +439,7 @@ void ui_collect_events(void) {
     
     // --- TEXT ---
     
-    if ((key=Getu8Pressed()))      arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=key, .mod=mod}));
+    if ((key=GetKeyPressed()))      arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=key, .mod=mod}));
     if (IsKeyPressed(KEY_BACKSPACE)) arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_BACKSPACE, .mod=mod}));
     if (IsKeyPressed(KEY_DELETE))    arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key=UI_DELETE, .mod=mod}));
     if (IsKeyPressed(KEY_TAB))       arrpush(ui_state->event_buffer, ((UI_Event){.kind=UI_EVENT_PRESS, .key='\t', .mod=mod}));
@@ -656,39 +657,82 @@ void ui_layout_fit_sizing_widths(UI_Node *node)
     Vector2 text_size;
     UI_Node *child;
     UI_Node_Data_KV *kv, *pkv;
-
+    
     if (!node) return;
-
+    
     UI_Node *parent = node->parent;
-
+    
     kv = hmgetp(ui_state->node_data, node->hash);
-
+    
     if (!parent) {
         ui_layout_fit_sizing_widths(node->first_child);
         goto exit;
     }
-
-
-
-exit:
+    
+	for (int ax = UI_Axis2_X; ax < UI_Axis2_COUNT; ++ax)
+    {
+        switch (node->size[ax].kind)
+        {
+            case UI_Size_Null: break;
+            case UI_Size_Parent_Percent: {
+	            node->dim.wh[ax] = parent->dim.wh[ax]*node->size[ax].value;
+	        } break;
+            case UI_Size_Pixels: {
+	            node->dim.wh[ax] = node->size[ax].value;
+	        } break;
+            case UI_Size_Children_Sum: {
+	            node->dim.wh[ax] = node->pos_start[ax]-node->dim.xy[ax] + node->pad[ax];
+	            
+	            // ui_layout(node->first_child);
+	            if (node->dim.wh[ax] == 2*node->pad[ax]) {
+	                child = node->first_child;
+	                while (child) {
+	                    node->dim.wh[ax] = Max(child->dim.wh[ax] + 2*node->pad[ax], node->dim.wh[ax]);
+	                    child = child->next;
+	                }
+	            }
+	        } break;
+            case UI_usizeext_Content: {
+	            text_size = MeasureTextEx(ui_state->font,
+	                                      (const u8*)node->string.str,
+	                                      node->font_size,
+	                                      node->font_size/10);
+	            f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y ? text_size.y : node->font_size};
+	            node->dim.wh[ax] = xy[ax]+2*node->pad[ax];
+	        } break;
+            case UI_Size_Ed_Text_Content: {
+                text_size = kv->value.ed_string ? MeasureTextEx(ui_state->font,
+                                                                (const u8*)kv->value.ed_string,
+                                                                node->font_size,
+                                                                node->font_size/10
+                                                                ) : (Vector2){0};
+                f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y ? text_size.y : node->font_size};
+                node->dim.wh[ax] = xy[ax]+2*node->pad[ax];
+            } break;
+            default:
+            break;
+        }
+    }
+    
+    exit:
     ui_layout_fit_sizing_widths(node->next);
 }
 
 // FIXME: change from iterating over the children to building self with parent as ref, maybe.
 void ui_layout(UI_Node *node)
 {
-
-/*
- TODO: Multi-pass approach:
- 1. Fit sizing widths
- 2. Grow & shrink Sizing widths
- 3. Wrap text
- 4. Fit sizing heights
- 5. Grow & shrink Sizing heights
- 6. Positions
- 7. Draw commands
- */
-
+    
+    /*
+     TODO: Multi-pass approach:
+     1. Fit sizing widths
+     2. Grow & shrink Sizing widths
+     3. Wrap text
+     4. Fit sizing heights
+     5. Grow & shrink Sizing heights
+     6. Positions
+     7. Draw commands
+     */
+    
     Vector2 text_size;
     UI_Node *child;
     UI_Node_Data_KV *kv, *pkv;
@@ -743,20 +787,20 @@ void ui_layout(UI_Node *node)
             text_size = MeasureTextEx(
                                       ui_state->font,
                                       (const u8*)node->string.str,
-                                      font_size,
-                                      font_size/10
+                                      node->font_size,
+                                      node->font_size/10
                                       );
-            f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y ? text_size.y : font_size};
+            f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y ? text_size.y : node->font_size};
             node->dim.wh[ax] = xy[ax]+2*node->pad[ax];
             break;
             case UI_Size_Ed_Text_Content: {
                 text_size = kv->value.ed_string ? MeasureTextEx(
                                                                 ui_state->font,
                                                                 (const u8*)kv->value.ed_string,
-                                                                font_size,
-                                                                font_size/10
+                                                                node->font_size,
+                                                                node->font_size/10
                                                                 ) : (Vector2){0};
-                f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y ? text_size.y : font_size};
+                f32 xy[UI_Axis2_COUNT] = {text_size.x, text_size.y ? text_size.y : node->font_size};
                 node->dim.wh[ax] = xy[ax]+2*node->pad[ax];
                 break;
             }
@@ -772,7 +816,7 @@ void ui_layout(UI_Node *node)
         parent->pos_start[UI_Axis2_Y] += node->dim.wh[UI_Axis2_Y];
     }
     
-exit:
+    exit:
     ui_layout(node->next);
 }
 
@@ -820,23 +864,23 @@ void ui_draw(UI_Node *node) {
         DrawTextEx(ui_state->font, (const u8 *)node->string.str,
                    (Vector2){node->dim.xy[0]+node->pad[0],
                        node->dim.xy[1]+node->pad[1]},
-                   font_size,
-                   font_size/10,
+                   node->font_size,
+                   node->font_size/10,
                    ui_state->text_color[i]);
     if (node->flags & UI_DRAW_ED_TEXT && kv->value.ed_string) {
         DrawTextEx(ui_state->font, (const u8 *)kv->value.ed_string,
                    (Vector2){node->dim.xy[0]+node->pad[0],
                        node->dim.xy[1]+node->pad[1]},
-                   font_size,
-                   font_size/10,
+                   node->font_size,
+                   node->font_size/10,
                    ui_state->text_color[i]);
         if (node->flags & UI_DRAW_CURSOR && node->hash == ui_state->focused) {
             u8 *txt = aprintf(ui_state->temp_arena, "%.*s", kv->value.cursor, kv->value.ed_string);
-            int txt_size = MeasureTextEx(ui_state->font, txt, font_size, font_size/10).x;
+            int txt_size = MeasureTextEx(ui_state->font, txt, node->font_size, node->font_size/10).x;
             DrawRectangle(node->dim.xy[0]+node->pad[0]+txt_size,
                           node->dim.xy[1]+node->pad[1],
                           2,
-                          font_size,
+                          node->font_size,
                           ui_state->text_color[i]);
         }
     }
